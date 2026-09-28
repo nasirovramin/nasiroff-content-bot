@@ -1,5 +1,9 @@
 {
   "name": "nasiroff-content-bot",
   "main": "src/index.js",
-  "compatibility_date": "2026-09-28"
+  "compatibility_date": "2026-09-28",
+  "vars": {
+    "MAIN_CHANNEL": "@nasiroff_az",
+    "TEST_CHANNEL": "-1004409605326"
+  }
 }
