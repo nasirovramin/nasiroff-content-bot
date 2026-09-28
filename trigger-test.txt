@@ -1,1 +1,1 @@
-trigger telegraph teaser after deploy v3
+trigger telegraph teaser manual test v4
