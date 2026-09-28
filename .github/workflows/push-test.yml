@@ -1,0 +1,16 @@
+name: Push approved post to test
+
+on:
+  push:
+    paths:
+      - "trigger-test.txt"
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for Cloudflare deploy
+        run: sleep 30
+      - name: Trigger test post
+        run: |
+          curl --fail --show-error --silent "https://nasiroff-content-bot.nasirovramin.workers.dev/push-approved-8f31d2"
