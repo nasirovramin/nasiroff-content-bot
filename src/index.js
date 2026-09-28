@@ -7,7 +7,18 @@ const tg = (token, method, body) =>
 
 export default {
   async fetch(request, env) {
+    const url = new URL(request.url);
+
     if (request.method === "GET") {
+      if (url.pathname === "/setup-webhook") {
+        const webhookUrl = `${url.origin}/`;
+        const r = await tg(env.BOT_TOKEN, "setWebhook", { url: webhookUrl });
+        const data = await r.json();
+        return new Response(JSON.stringify(data, null, 2), {
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+
       return new Response("nasiroff_content_bot is running");
     }
 
@@ -17,7 +28,6 @@ export default {
 
     const update = await request.json();
 
-    // 1) Ramin sends a prepared post to the bot in private.
     if (update.message?.chat?.type === "private" && update.message?.text) {
       const text = update.message.text;
 
@@ -44,22 +54,16 @@ export default {
 
       const data = await testPost.json();
 
-      if (!data.ok) {
-        await tg(env.BOT_TOKEN, "sendMessage", {
-          chat_id: update.message.chat.id,
-          text: "Test kanalına göndərmək alınmadı. Kanal ID/username və admin icazələrini yoxla.",
-        });
-      } else {
-        await tg(env.BOT_TOKEN, "sendMessage", {
-          chat_id: update.message.chat.id,
-          text: "Test kanalına göndərildi.",
-        });
-      }
+      await tg(env.BOT_TOKEN, "sendMessage", {
+        chat_id: update.message.chat.id,
+        text: data.ok
+          ? "Test kanalına göndərildi."
+          : "Test kanalına göndərmək alınmadı. Kanal username/ID və admin icazələrini yoxla.",
+      });
 
       return new Response("ok");
     }
 
-    // 2) Approval button in test channel.
     if (update.callback_query) {
       const q = update.callback_query;
       const msg = q.message;
