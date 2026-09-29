@@ -7,7 +7,7 @@ const tg = (token, method, body) =>
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "no-editor-flash";
+const BUILD_VERSION = "media-no-cache";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -194,7 +194,10 @@ export class CmsStore {
         return new Response(out, {
           headers: {
             "content-type": meta.contentType,
-            "cache-control": "public, max-age=31536000, immutable"
+            "cache-control": "no-store, no-cache, must-revalidate, max-age=0",
+            "pragma": "no-cache",
+            "expires": "0",
+            "surrogate-control": "no-store"
           }
         });
       }
@@ -328,7 +331,10 @@ export default {
         return new Response(img.body, {
           headers: {
             "content-type": "image/jpeg",
-            "cache-control": "public, max-age=86400"
+            "cache-control": "no-store, no-cache, must-revalidate, max-age=0",
+            "pragma": "no-cache",
+            "expires": "0",
+            "surrogate-control": "no-store"
           }
         });
       }
