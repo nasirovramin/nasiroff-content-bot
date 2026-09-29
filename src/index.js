@@ -7,7 +7,7 @@ const tg = (token, method, body) =>
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "editor-runtime-fix";
+const BUILD_VERSION = "link-preview-fix";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -367,6 +367,7 @@ button.primary{background:#171717;color:#fff;border-color:#171717}
 #editor h2{font-size:24px;line-height:1.22;margin:30px 0 10px;font-weight:600}
 #editor p{font-size:18px;line-height:1.58;margin:0 0 16px}
 #editor .lead{font-size:25px;line-height:1.23;font-weight:700;margin:0 0 28px}
+#editor a{color:#0b57d0;text-decoration:underline;text-underline-offset:2px}
 #editor img,#editor video{display:block;width:100%;height:auto;margin:22px 0 28px}.youtube-embed{position:relative;width:100%;aspect-ratio:16/9;margin:22px 0 28px}.youtube-embed iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
 .media-wrap{position:relative;display:block;isolation:isolate}.media-wrap[contenteditable="false"]{user-select:none}
 .media-wrap>img,.media-wrap>video{position:relative;z-index:1}
@@ -496,12 +497,17 @@ function applyLink(){
   const range=sel.getRangeAt(0);
   const a=document.createElement('a');
   a.href=href;
-  a.target='_blank';
-  a.rel='noopener noreferrer';
+  a.removeAttribute('target');
+  a.removeAttribute('rel');
   try{
     range.surroundContents(a);
   }catch(err){
     document.execCommand('createLink',false,href);
+    const current=window.getSelection()?.anchorNode?.parentElement?.closest('a');
+    if(current){
+      current.removeAttribute('target');
+      current.removeAttribute('rel');
+    }
   }
 
   document.getElementById('linkDetails').open=false;
@@ -822,6 +828,7 @@ h2{font-size:24px;line-height:1.22;margin:30px 0 10px;font-weight:600;letter-spa
 p{font-size:18px;line-height:1.58;margin:0 0 16px;font-weight:400}
 img,video{display:block;width:100%;height:auto;margin:22px 0 30px;border-radius:0}.youtube-embed{position:relative;width:100%;aspect-ratio:16/9;margin:22px 0 30px}.youtube-embed iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
 .lead{font-size:25px;line-height:1.23;font-weight:700;letter-spacing:-.02em;margin:0 0 28px}
+main a:not(.back){color:#0b57d0;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
 .back{display:inline-flex;align-items:center;justify-content:center;margin-top:26px;padding:9px 14px;border:1px solid #a7a7a7;border-radius:999px;color:#171717;text-decoration:none;font-size:14px;font-weight:600}
 .back:hover{border-color:#171717}
 @media(max-width:640px){
