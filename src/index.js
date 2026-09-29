@@ -13,11 +13,10 @@ export default {
 
       if (url.pathname === "/push-approved-8f31d2") {
         const title = "Bir layihəyə dörd fərqli baxış";
-        const imageUrl = "https://raw.githubusercontent.com/nasirovramin/nasiroff-content-bot/main.ru/assets/eyes.jpg";
+        const imageUrl = "https://raw.githubusercontent.com/nasirovramin/nasiroff-content-bot/8b4f2dcff36c50c507f62ac61de2dc2ea6bb791c/assets/eyes.jpg";
 
         const accountBody = new URLSearchParams({
-          short_name: "nasiroff",
-          author_name: "Nasiroff"
+          short_name: "nasiroff"
         });
         const accountRes = await fetch("https://api.telegra.ph/createAccount", {
           method: "POST",
@@ -37,36 +36,34 @@ export default {
         const h = (text) => ({ tag: "h4", children: [text] });
         const content = [
           { tag: "img", attrs: { src: imageUrl } },
-          p("Edvard de Bononun Six Thinking Hats — “Altı düşüncə papağı” metodunu yəqin ki, çoxumuz bilirik. Mənə isə layihə üzərində işləyərkən başqa bir düşüncə modeli daha maraqlı gəlir."),
+          p("Edvard de Bononun Six Thinking Hats, yəni Altı düşüncə papağı metodunu çoxumuz bilirik. Mənə isə layihə üzərində işləyərkən başqa bir yanaşma daha maraqlı gəlir."),
           p("Bəzən yeni ideya tapmaq üçün daha çox düşünmək yox, baxış bucağını dəyişmək lazımdır. Eyni layihəyə dörd fərqli roldan baxdığınızı təsəvvür edin."),
-          h("Birinci baxış — uşaq"),
-          p("Burada hər şey mümkündür. “Bu alınmaz”, “müştəri bunu qəbul etməz”, “büdcə çatmaz” kimi məhdudiyyətləri bir müddət kənara qoyursunuz."),
-          p("Forma, məna, material, texnologiya və ideyalarla oynayırsınız. Bir-biri ilə əlaqəsi olmayan şeyləri belə birləşdirirsiniz."),
-          p("Bu mərhələdə məqsəd dərhal doğru həlli tapmaq deyil. Məqsəd mümkün qədər çox fərqli ehtimal yaratmaqdır. Çünki kreativ prosesin əvvəlində məntiq çox tez işə düşəndə yaxşı ideya hələ yaranmamış yox ola bilər."),
-          h("İkinci baxış — İsida"),
-          p("Qədim Misirdə İsida analıq, qayğı və qoruma ilə əlaqələndirilirdi. Bu baxışda ideyanın yalnız bu gün necə işlədiyinə deyil, gələcəkdə nə yaradacağına baxırsınız."),
-          p("Bu həll insanlara nə verəcək? İstifadəçi bunu necə hiss edəcək? Estetik olaraq nə qədər davamlıdır? Trend dəyişəndən sonra da işləyəcəkmi?"),
-          p("Burada dizaynı yalnız vizual həll kimi yox, insan, istifadəçi təcrübəsi, biznes və gələcək nəticələrlə birlikdə düşünürsünüz. Yəni ideyanın bu gününü deyil, davamını görməyə çalışırsınız."),
-          h("Üçüncü baxış — Osiris"),
-          p("İndi kreativ romantikanı bir qədər kənara qoymaq vaxtıdır. Faktlara baxırsınız, müqayisə edirsiniz, ölçürsünüz."),
-          p("Hansı ideya həqiqətən işləyir? Hansı sadəcə maraqlı görünür? Hansı hissə artıqdır?"),
-          p("Bu mərhələdə seleksiya başlayır. Zəif ideyaları çıxarırsınız, güclü ideyaları təmizləyirsiniz və konsepti daha aydın, bütöv sistemə çevirirsiniz."),
-          p("Kreativlik yalnız yeni ideya yaratmaq deyil. Nədən imtina etməyi bilmək də kreativ prosesin bir hissəsidir."),
-          h("Dördüncü baxış — firon"),
-          p("Bu artıq qərar mərhələsidir. Araşdırmısınız, ideyalar yaratmısınız, gələcəyi düşünmüsünüz, variantları müqayisə etmisiniz. İndi seçim etmək lazımdır."),
-          p("Burada təcrübə, zövq və intuisiya işə düşür. Bəzən ən rasional yolu seçirsiniz. Bəzən isə bilərəkdən daha riskli, qəribə və provokativ istiqamətin arxasında dayanırsınız."),
-          p("Çünki Creative Director üçün əsas məsələ yalnız yaxşı ideyanı görmək deyil. Doğru anda hansı ideyanın arxasında dayanacağını seçməkdir."),
+          h("Birinci baxış-uşaq"),
+          p("Burada hər şey mümkündür. Bu alınmaz, müştəri qəbul etməz, büdcə çatmaz kimi fikirləri bir müddət kənara qoyursunuz."),
+          p("Forma, məna, material, texnologiya və ideyalarla oynayırsınız. Bir-biri ilə əlaqəsi olmayan şeyləri də birləşdirirsiniz."),
+          p("Bu mərhələdə məqsəd dərhal doğru cavabı tapmaq deyil. Məqsəd mümkün qədər çox variant yaratmaqdır."),
+          h("İkinci baxış-İsida"),
+          p("İsida qədim Misirdə analıq, qayğı və qoruma ilə bağlı obrazdır. Burada ideyanın yalnız bu gününə yox, gələcəyinə baxırsınız."),
+          p("Bu həll insana nə verir? İstifadəçi üçün rahatdırmı? Bir neçə ildən sonra da mənası qalacaqmı?"),
+          p("Dizaynı yalnız görüntü kimi yox, insan, istifadəçi təcrübəsi, biznes və gələcək nəticələrlə birlikdə düşünürsünüz."),
+          h("Üçüncü baxış-Osiris"),
+          p("İndi ideyalara daha sərt baxmaq vaxtıdır. Faktlara baxırsınız, müqayisə edirsiniz, ölçürsünüz."),
+          p("Hansı fikir həqiqətən işləyir? Hansı sadəcə maraqlı görünür? Hansı hissə artıqdır?"),
+          p("Zəif variantları çıxarırsınız. Güclü ideyanı təmizləyib daha aydın sistemə çevirirsiniz."),
+          p("Kreativlik yalnız ideya yaratmaq deyil. Nədən imtina etməyi bilmək də onun bir hissəsidir."),
+          h("Dördüncü baxış-firon"),
+          p("Bu artıq qərar mərhələsidir. Araşdırmısınız, variant yaratmısınız, müqayisə etmisiniz. İndi seçim etmək lazımdır."),
+          p("Burada təcrübə, zövq və intuisiya işə düşür. Bəzən daha təhlükəsiz yolu, bəzən isə daha riskli və fərqli istiqaməti seçirsiniz."),
+          p("Creative Director üçün əsas məsələ yalnız yaxşı ideyanı görmək deyil. Hansı ideyanın arxasında dayanacağını seçməkdir."),
           h("Dörd mərhələ"),
-          p("Uşaq — yarat. İsida — gələcəyi gör. Osiris — seç və təmizlə. Firon — qərar ver."),
+          p("Uşaq-yarat. İsida-gələcəyi gör. Osiris-seç və təmizlə. Firon-qərar ver."),
           p("Eyni layihəyə dörd dəfə baxırsınız. Amma hər dəfə başqa gözlə."),
-          p("Bəlkə də qədim misirlilərin heykəllər üçün gözləri ayrıca hazırlaması təsadüfi deyildi. Göz onlar üçün sadəcə görmək vasitəsi yox, daha dərin mənası olan bir simvol idi."),
-          { tag: "p", children: [{ tag: "em", children: ["Qədim Misir göz inkrustasiyaları: şüşə, obsidian və lazurit."] }] }
+          p("Bəlkə də qədim misirlilərin heykəllər üçün gözləri ayrıca hazırlaması təsadüfi deyildi. Göz onlar üçün sadəcə görmək vasitəsi yox, xüsusi məna daşıyan bir simvol idi.")
         ];
 
         const pageBody = new URLSearchParams({
           access_token: accountData.result.access_token,
           title,
-          author_name: "Nasiroff",
           content: JSON.stringify(content),
           return_content: "false"
         });
@@ -86,9 +83,9 @@ export default {
 
         const caption = `<b>Bir layihəyə dörd fərqli baxış 👁</b>
 
-Bəzən yaxşı ideya tapmaq üçün daha çox düşünmək yox, baxış bucağını dəyişmək lazımdır.
+Bəzən yeni ideya tapmaq üçün daha çox düşünmək yox, məsələyə başqa gözlə baxmaq lazımdır.
 
-Uşaq kimi yarat, gələcəyi düşün, ideyanı sərt şəkildə seç və sonda qərar ver.
+Uşaq-yarat. İsida-gələcəyi gör. Osiris-seç və təmizlə. Firon-qərar ver.
 
 <a href="${pageData.result.url}">Ətraflı oxu</a>`;
 
