@@ -103,7 +103,7 @@ Uşaq-yarat. İsida-gələcəyi gör. Osiris-seç və təmizlə. Firon-qərar ve
 
 <a href="${articleUrl}">Ətraflı oxu</a>`;
 
-        const imageRes = await fetch(imageUrl);
+        const imageRes = await fetch(imageSource);
         if (!imageRes.ok) {
           return new Response(JSON.stringify({
             ok: false,
