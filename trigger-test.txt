@@ -1,1 +1,1 @@
-trigger after direct-image-upload fix v5
+trigger valid jpeg test v6
