@@ -25,3 +25,8 @@ jobs:
         run: |
           set -euxo pipefail
           curl --fail --show-error --silent "https://nasiroff-content-bot.nasirovramin.workers.dev/article/dord-baxis" | grep -q "video"
+      - name: Send test-channel post
+        run: |
+          set -euxo pipefail
+          curl --fail --show-error --silent "https://nasiroff-content-bot.nasirovramin.workers.dev/push-approved-8f31d2" | tee /tmp/tg.json
+          test "$(jq -r '.telegram.ok' /tmp/tg.json)" = "true"
