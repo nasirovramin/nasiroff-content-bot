@@ -20,3 +20,17 @@ jobs:
           node-version: "22"
       - run: npm install
       - run: npx wrangler deploy --dry-run
+      - name: Check editor inline JavaScript
+        run: |
+          node <<'NODE'
+          const fs=require('fs');
+          const src=fs.readFileSync('src/index.js','utf8');
+          const start=src.indexOf('<script>');
+          const end=src.indexOf('</script>', start);
+          if(start<0||end<0) throw new Error('editor script not found');
+          let js=src.slice(start+8,end);
+          js=js.replace(/${JSON\.stringify\(apiUrl\)}/g, '"https://example.com/api"');
+          js=js.replace(/${JSON\.stringify\(mediaApiUrl\)}/g, '"https://example.com/media"');
+          fs.writeFileSync('/tmp/editor.js',js);
+          NODE
+          node --check /tmp/editor.js
