@@ -7,7 +7,7 @@ const tg = (token, method, body) =>
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "link-icon-large";
+const BUILD_VERSION = "no-editor-flash";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -340,6 +340,9 @@ export default {
           return new Response("Bu editor linki etibarsızdır.", { status: 401 });
         }
 
+        const initialArticle = await cmsGetArticle(env);
+        const initialEditorHtml = initialArticle?.html || defaultArticleHtml();
+
         const articleUrl = `${url.origin}/article/dord-baxis`;
         const previewUrl = `${articleUrl}?preview=1&u=${encodeURIComponent(userId)}&sig=${encodeURIComponent(sig)}`;
         const apiUrl = `${url.origin}/api/article/dord-baxis?u=${encodeURIComponent(userId)}&sig=${encodeURIComponent(sig)}`;
@@ -451,7 +454,7 @@ html,body{margin:0;background:#f4f4f4;color:#171717;font-family:-apple-system,Bl
 </div>
 <div class="tip">Mətndə istədiyin yerə kursoru qoy, sonra şəkil/video düyməsini bas. Media həmin nöqtəyə əlavə olunacaq.</div>
 <div class="wrap">
-  <article id="editor" contenteditable="true">${defaultArticleHtml()}</article>
+  <article id="editor" contenteditable="true">${initialEditorHtml}</article>
 </div>
 <script>
 let savedRange=null;
@@ -898,14 +901,6 @@ async function saveDraft(){
   },350);
 }
 
-(async()=>{
-  const r=await fetch(API_URL);
-  if(!r.ok) return;
-  const data=await r.json();
-  if(data?.article?.html) editor.innerHTML=data.article.html;
-  enhanceMedia();
-  markSaved();
-})().catch(()=>enhanceMedia());
 enhanceMedia();
 markSaved();
 </script>
