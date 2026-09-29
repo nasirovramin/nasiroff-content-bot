@@ -7,7 +7,7 @@ const tg = (token, method, body) =>
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "linkedin-publish-sync";
+const BUILD_VERSION = "linkedin-expiry-reminder";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -196,6 +196,71 @@ async function cmsPutArticle(env, record) {
   });
 }
 
+async function rememberOwnerTelegramId(env, userId) {
+  if (!userId) return;
+  const current = await cmsGetArticle(env) || {};
+  if (String(current.ownerTelegramId || "") === String(userId)) return;
+  await cmsPutArticle(env, {
+    ...current,
+    ownerTelegramId: String(userId),
+    updatedAt: current.updatedAt || new Date().toISOString()
+  });
+}
+
+async function sendLinkedInExpiryReminder(env) {
+  const li = await cmsGetLinkedIn(env);
+  const article = await cmsGetArticle(env);
+  const ownerId = article?.ownerTelegramId;
+  if (!li?.expiresAt || !ownerId) return { ok: false, skipped: "missing_connection_or_owner" };
+
+  const msLeft = Number(li.expiresAt) - Date.now();
+  const sevenDays = 7 * 24 * 60 * 60 * 1000;
+  if (msLeft <= 0) {
+    const marker = `expired:${li.expiresAt}`;
+    if (li.lastExpiryReminder === marker) return { ok: true, skipped: "already_notified" };
+
+    const r = await tg(env.BOT_TOKEN, "sendMessage", {
+      chat_id: ownerId,
+      text: "⚠️ LinkedIn bağlantısının token müddəti bitib. Yenidən qoşmaq üçün bu linki açın:",
+      reply_markup: {
+        inline_keyboard: [[{
+          text: "🔗 LinkedIn-i yenidən qoş",
+          url: "https://nasiroff-content-bot.nasirovramin.workers.dev/linkedin/connect"
+        }]]
+      }
+    });
+    const data = await r.json().catch(()=>({}));
+    if (data.ok) {
+      await cmsPutLinkedIn(env, { ...li, lastExpiryReminder: marker });
+    }
+    return data;
+  }
+
+  if (msLeft <= sevenDays) {
+    const marker = `soon:${li.expiresAt}`;
+    if (li.lastExpiryReminder === marker) return { ok: true, skipped: "already_notified" };
+
+    const days = Math.max(1, Math.ceil(msLeft / (24 * 60 * 60 * 1000)));
+    const r = await tg(env.BOT_TOKEN, "sendMessage", {
+      chat_id: ownerId,
+      text: `⚠️ LinkedIn bağlantısının müddətinin bitməsinə təxminən ${days} gün qalıb. İndi yeniləsən, paylaşımlar dayanmayacaq.`,
+      reply_markup: {
+        inline_keyboard: [[{
+          text: "🔗 LinkedIn-i yenilə",
+          url: "https://nasiroff-content-bot.nasirovramin.workers.dev/linkedin/connect"
+        }]]
+      }
+    });
+    const data = await r.json().catch(()=>({}));
+    if (data.ok) {
+      await cmsPutLinkedIn(env, { ...li, lastExpiryReminder: marker });
+    }
+    return data;
+  }
+
+  return { ok: true, skipped: "not_due" };
+}
+
 async function cmsDeleteMedia(env, key) {
   return cmsStub(env).fetch(`https://cms.internal/media/${encodeURIComponent(key)}`, { method: "DELETE" });
 }
@@ -355,6 +420,10 @@ export class CmsStore {
 }
 
 export default {
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(sendLinkedInExpiryReminder(env));
+  },
+
   async fetch(request, env) {
     const url = new URL(request.url);
     const imageSource = "https://raw.githubusercontent.com/nasirovramin/nasiroff-content-bot/main.ru/assets/eyes.jpg";
@@ -1378,6 +1447,10 @@ ${bodyHtml}
     }
 
     const update = await request.json();
+
+    if (update.message?.chat?.type === "private" && update.message?.from?.id) {
+      await rememberOwnerTelegramId(env, update.message.from.id);
+    }
 
     if (update.message?.chat?.type === "private" && update.message?.photo?.length) {
       const photo = update.message.photo[update.message.photo.length - 1];
