@@ -7,7 +7,7 @@ const tg = (token, method, body) =>
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "gemini-health-check";
+const BUILD_VERSION = "telegram-archive-through-2025";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -373,7 +373,93 @@ function looksLikeContentUrl(candidate, sourceUrl) {
   }
 }
 
+
+function telegramChannelName(sourceUrl) {
+  try {
+    const u = new URL(sourceUrl);
+    if (!/^(?:www\.)?t\.me$/i.test(u.hostname)) return null;
+    const parts = u.pathname.split("/").filter(Boolean);
+    if (!parts.length) return null;
+    if (parts[0] === "s" && parts[1]) return parts[1];
+    return parts[0];
+  } catch {
+    return null;
+  }
+}
+
+async function extractTelegramArchiveCandidates(sourceUrl) {
+  const channel = telegramChannelName(sourceUrl);
+  if (!channel) return [];
+
+  let before = null;
+  const out = [];
+  const seen = new Set();
+  let pages = 0;
+  let reached2025 = false;
+
+  while (pages < 35 && out.length < 120) {
+    const pageUrl = new URL(`https://t.me/s/${channel}`);
+    if (before) pageUrl.searchParams.set("before", String(before));
+
+    const r = await fetch(pageUrl.href, {
+      headers: { "user-agent": "Mozilla/5.0 NASIROFF-Content-Bot/1.0" },
+      redirect: "follow"
+    });
+    if (!r.ok) break;
+
+    const html = await r.text();
+    const blockRe = /<div class="tgme_widget_message_wrap[\s\S]*?<div class="tgme_widget_message[^>]*data-post="([^"]+)"[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/gi;
+    const simpleRe = /data-post="([^"]+)"[\s\S]{0,12000}?<time[^>]+datetime="([^"]+)"[\s\S]{0,12000}?(?:tgme_widget_message_text[^>]*>([\s\S]*?)<\/div>)?/gi;
+
+    let minId = Infinity;
+    let foundOnPage = 0;
+    let m;
+    while ((m = simpleRe.exec(html))) {
+      const postRef = m[1];
+      const dt = m[2];
+      const rawText = m[3] || "";
+      const idMatch = postRef.match(/\/(\d+)$/);
+      if (!idMatch) continue;
+      const msgId = Number(idMatch[1]);
+      if (!Number.isFinite(msgId)) continue;
+      minId = Math.min(minId, msgId);
+      foundOnPage++;
+
+      const ts = Date.parse(dt);
+      if (!Number.isFinite(ts)) continue;
+      const year = new Date(ts).getUTCFullYear();
+      if (year <= 2025) reached2025 = true;
+      if (year > 2025) continue;
+
+      const postUrl = `https://t.me/${postRef}`;
+      if (seen.has(postUrl)) continue;
+      seen.add(postUrl);
+
+      const label = cleanText(rawText).slice(0, 240);
+      out.push({
+        url: postUrl,
+        title: label || `Telegram post ${msgId}`,
+        publishedAt: new Date(ts).toISOString(),
+        publishedYear: year
+      });
+      if (out.length >= 120) break;
+    }
+
+    if (!foundOnPage || !Number.isFinite(minId) || minId <= 1) break;
+    before = minId;
+    pages++;
+
+    if (reached2025 && out.length >= 80) break;
+  }
+
+  return out;
+}
+
 async function extractSourceCandidates(sourceUrl) {
+  if (telegramChannelName(sourceUrl)) {
+    return extractTelegramArchiveCandidates(sourceUrl);
+  }
+
   const r = await fetch(sourceUrl, {
     headers: { "user-agent": "Mozilla/5.0 NASIROFF-Content-Bot/1.0" },
     redirect: "follow"
@@ -403,6 +489,7 @@ async function discoverRelevantSourceItems(env, sourceUrl) {
 
   const candidates = await extractSourceCandidates(sourceUrl);
   if (!candidates.length) {
+    if (telegramChannelName(sourceUrl)) return [];
     return [{ url: sourceUrl, title: "", category: "unknown" }];
   }
 
@@ -425,7 +512,9 @@ Qaydalar:
 - Uyğun olmayan biznes, siyasət, ümumi texnologiya, şou-biznes və reklam xarakterli səhifələri seçmə.
 - Eyni mövzudan çox oxşar materialları azalt, kateqoriyalar arasında balans saxla.
 - Maksimum 8 material seç.
-- Mümkün qədər yeni və məqalə/post tipli URL-ləri seç.
+- Telegram mənbəsində 2026 postlarını seçmə. Yalnız 31 dekabr 2025 və daha köhnə materiallardan seçim et.
+- Tarixi materiallarda yenilikdən çox faydalılığa üstünlük ver.
+- Məqalə/post tipli URL-ləri seç.
 - Yalnız verilmiş URL-lərdən istifadə et, URL uydurma.
 - Hər seçimin category sahəsini bu dəyərlərdən biri et:
   Branding, VisualIdentity, Packaging, Typography, Campaign, ArtDirection, AI
@@ -434,7 +523,7 @@ Qaydalar:
 Mənbə: ${sourceUrl}
 
 Namizədlər:
-${compact.map((x,i)=>`${i+1}. [${x.title}] ${x.url}`).join("\n")}
+${compact.map((x,i)=>`${i+1}. [${x.title}] ${x.url}${x.publishedAt ? ` | tarix: ${x.publishedAt}` : ""}`).join("\n")}
 `;
 
   const schema = {
