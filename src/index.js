@@ -374,14 +374,14 @@ button.primary{background:#171717;color:#fff;border-color:#171717}
 <body>
 <div class="toolbar">
   <button type="button" onclick="fmt('bold')">Bold</button>
-  <button type="button" onclick="fmt('formatBlock','h2')">Başlıq</button>
+  <button type="button" onclick="fmt('formatBlock','h2')">H2</button>
   <button type="button" onclick="fmt('formatBlock','p')">Mətn</button>
-  <button type="button" onclick="document.getElementById('imageInput').click()">🖼 Şəkil əlavə et<br><small>(1200 × 628 px)</small></button>
-  <button type="button" onclick="document.getElementById('videoInput').click()">🎞 Video/GIF əlavə et<br><small>(1200 × 628 px)</small></button>
+  <button type="button" onclick="document.getElementById('imageInput').click()">🖼</button>
+  <button type="button" onclick="document.getElementById('videoInput').click()">🎞</button>
   <input id="imageInput" type="file" accept="image/*" hidden>
   <input id="videoInput" type="file" accept="video/*,image/gif" hidden>
-  <a class="btn" href="${articleUrl}" target="_blank">👁 Preview</a>
-  <button class="primary" type="button" onclick="saveDraft()">💾 Save & Update</button>
+  <a class="btn" href="${articleUrl}" target="_blank">Preview</a>
+  <button class="primary" type="button" onclick="saveDraft()">Save</button>
   <span id="status" class="status">Edit rejimi</span>
 </div>
 <div class="tip">Mətndə istədiyin yerə kursoru qoy, sonra şəkil/video düyməsini bas. Media həmin nöqtəyə əlavə olunacaq.</div>
