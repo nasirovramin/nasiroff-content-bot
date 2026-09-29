@@ -1,1 +1,1 @@
-image replacement pending
+trigger after stable image replacement v11
