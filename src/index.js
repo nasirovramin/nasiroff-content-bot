@@ -7,7 +7,7 @@ const tg = (token, method, body) =>
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "linkedin-oauth-ready";
+const BUILD_VERSION = "linkedin-publish-sync";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -78,6 +78,93 @@ function telegramCaptionFromHtml(html, articleUrl) {
   const lead = extractFirst(html, "p", "lead");
   const shortLead = lead.length > 420 ? lead.slice(0, 417).trimEnd() + "..." : lead;
   return `<b>${title}</b>\n\n${shortLead}\n\n<a href="${articleUrl}">Ətraflı oxu</a>`;
+}
+
+function linkedinCommentaryFromHtml(html, articleUrl) {
+  const title = extractFirst(html, "h1") || ARTICLE_TITLE;
+  const lead = extractFirst(html, "p", "lead");
+  const shortLead = lead.length > 900 ? lead.slice(0, 897).trimEnd() + "..." : lead;
+  return `${title}\n\n${shortLead}\n\nƏtraflı oxu: ${articleUrl}`;
+}
+
+function linkedinApiHeaders(accessToken, extra = {}) {
+  return {
+    "authorization": `Bearer ${accessToken}`,
+    "content-type": "application/json",
+    "linkedin-version": "202609",
+    "x-restli-protocol-version": "2.0.0",
+    ...extra
+  };
+}
+
+function linkedinConnectionUsable(li) {
+  if (!li?.accessToken || !li?.profile?.sub) return false;
+  if (li.expiresAt && Date.now() >= Number(li.expiresAt) - 60_000) return false;
+  return true;
+}
+
+async function linkedinCreateTextPost(env, commentary) {
+  const li = await cmsGetLinkedIn(env);
+  if (!linkedinConnectionUsable(li)) {
+    return { ok: false, error: "linkedin_not_connected_or_expired" };
+  }
+
+  const author = `urn:li:person:${li.profile.sub}`;
+  const r = await fetch("https://api.linkedin.com/rest/posts", {
+    method: "POST",
+    headers: linkedinApiHeaders(li.accessToken),
+    body: JSON.stringify({
+      author,
+      commentary,
+      visibility: "PUBLIC",
+      distribution: {
+        feedDistribution: "MAIN_FEED",
+        targetEntities: [],
+        thirdPartyDistributionChannels: []
+      },
+      lifecycleState: "PUBLISHED",
+      isReshareDisabledByAuthor: false
+    })
+  });
+
+  const postId = r.headers.get("x-restli-id");
+  const responseText = await r.text();
+  return {
+    ok: r.status === 201 && !!postId,
+    status: r.status,
+    postId: postId || null,
+    error: r.status === 201 ? null : responseText.slice(0, 800)
+  };
+}
+
+async function linkedinUpdateTextPost(env, postId, commentary) {
+  const li = await cmsGetLinkedIn(env);
+  if (!linkedinConnectionUsable(li)) {
+    return { ok: false, error: "linkedin_not_connected_or_expired" };
+  }
+  if (!postId) return { ok: false, error: "linkedin_post_id_missing" };
+
+  const encodedId = encodeURIComponent(postId);
+  const r = await fetch(`https://api.linkedin.com/rest/posts/${encodedId}`, {
+    method: "POST",
+    headers: linkedinApiHeaders(li.accessToken, {
+      "x-restli-method": "PARTIAL_UPDATE"
+    }),
+    body: JSON.stringify({
+      patch: {
+        "$set": {
+          commentary
+        }
+      }
+    })
+  });
+
+  const responseText = await r.text();
+  return {
+    ok: r.status === 204,
+    status: r.status,
+    error: r.status === 204 ? null : responseText.slice(0, 800)
+  };
 }
 
 function extractMediaKeys(html) {
@@ -510,7 +597,29 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
           telegram = await r.json();
         }
 
-        return json({ ok: true, article: record, telegram, removedMedia: removed.length });
+        let linkedin = null;
+        if (old.linkedinPostId) {
+          linkedin = await linkedinUpdateTextPost(
+            env,
+            old.linkedinPostId,
+            linkedinCommentaryFromHtml(body.html, articleUrl)
+          );
+          if (linkedin.ok) {
+            record.linkedinLastSyncAt = new Date().toISOString();
+            record.linkedinLastError = null;
+          } else {
+            record.linkedinLastError = linkedin.error || `HTTP ${linkedin.status || "error"}`;
+          }
+          await cmsPutArticle(env, record);
+        }
+
+        return json({
+          ok: true,
+          article: record,
+          telegram,
+          linkedin,
+          removedMedia: removed.length
+        });
       }
 
       return new Response("Method not allowed", { status: 405 });
@@ -1367,17 +1476,39 @@ ${bodyHtml}
 
           const publishedMessageId = copiedData.result.message_id;
           const existing = await cmsGetArticle(env) || {};
-          await cmsPutArticle(env, {
+          const articleHtml = existing.html || defaultArticleHtml();
+          const articleUrl = `${url.origin}/article/${ARTICLE_ID}`;
+
+          let linkedin = null;
+          if (!existing.linkedinPostId) {
+            linkedin = await linkedinCreateTextPost(
+              env,
+              linkedinCommentaryFromHtml(articleHtml, articleUrl)
+            );
+          }
+
+          const record = {
             ...existing,
             id: ARTICLE_ID,
             slug: ARTICLE_ID,
-            html: existing.html || defaultArticleHtml(),
+            html: articleHtml,
             mediaKeys: existing.mediaKeys || [],
             mainMessageId: publishedMessageId,
             mainMessageType: msg.photo?.length ? "media" : "text",
             publishedAt: existing.publishedAt || new Date().toISOString(),
             updatedAt: new Date().toISOString()
-          });
+          };
+
+          if (linkedin?.ok) {
+            record.linkedinPostId = linkedin.postId;
+            record.linkedinPublishedAt = new Date().toISOString();
+            record.linkedinLastSyncAt = new Date().toISOString();
+            record.linkedinLastError = null;
+          } else if (linkedin && !linkedin.ok) {
+            record.linkedinLastError = linkedin.error || `HTTP ${linkedin.status || "error"}`;
+          }
+
+          await cmsPutArticle(env, record);
 
           await tg(env.BOT_TOKEN, "copyMessage", {
             chat_id: q.from.id,
@@ -1388,9 +1519,15 @@ ${bodyHtml}
           const editSig = await makeEditSig(env, ARTICLE_ID, q.from.id);
           const editUrl = `${url.origin}/edit/dord-baxis?u=${encodeURIComponent(q.from.id)}&sig=${editSig}`;
 
+          const linkedinLine = existing.linkedinPostId
+            ? "LinkedIn: əvvəlki post saxlanıldı."
+            : linkedin?.ok
+              ? "LinkedIn: paylaşıldı ✅"
+              : "LinkedIn: paylaşılmadı ⚠️";
+
           await tg(env.BOT_TOKEN, "sendMessage", {
             chat_id: q.from.id,
-            text: `✅ Post paylaşıldı.\nPost ID: ${publishedMessageId}`,
+            text: `✅ Telegram-da paylaşıldı.\n${linkedinLine}\nPost ID: ${publishedMessageId}`,
             reply_markup: {
               inline_keyboard: [[{ text: "✏️ Edit", url: editUrl }]]
             }
