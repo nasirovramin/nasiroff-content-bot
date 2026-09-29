@@ -7,7 +7,7 @@ const tg = (token, method, body) =>
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "preview-edit-return";
+const BUILD_VERSION = "toolbar-ui-image-opt";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -358,7 +358,7 @@ export default {
 *{box-sizing:border-box}
 html,body{margin:0;background:#f4f4f4;color:#171717;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}
 .toolbar{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.96);backdrop-filter:blur(10px);border-bottom:1px solid #ddd;padding:10px 14px;display:flex;gap:8px;flex-wrap:wrap}
-button,.btn{border:1px solid #cfcfcf;background:#fff;color:#171717;border-radius:9px;padding:9px 12px;font-size:14px;font-weight:650;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:7px}.icon-btn svg{width:22px;height:22px;display:block;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.has-tip{position:relative}.has-tip::after{content:attr(data-tip);position:absolute;left:50%;top:calc(100% + 8px);transform:translateX(-50%);background:#171717;color:#fff;font-size:12px;font-weight:500;line-height:1.35;padding:7px 9px;border-radius:7px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .15s ease;z-index:50}.has-tip:hover::after,.has-tip:focus-visible::after{opacity:1}
+button,.btn{border:1px solid #cfcfcf;background:#fff;color:#171717;border-radius:12px;min-height:48px;padding:10px 14px;font-size:14px;font-weight:650;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:7px}.icon-btn{width:48px;padding:0}.icon-btn svg{width:22px;height:22px;display:block;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.has-tip{position:relative}.has-tip::after{content:attr(data-tip);position:absolute;left:50%;top:calc(100% + 8px);transform:translateX(-50%);background:#171717;color:#fff;font-size:12px;font-weight:500;line-height:1.35;padding:7px 9px;border-radius:7px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .15s ease;z-index:50}.has-tip:hover::after,.has-tip:focus-visible::after{opacity:1}
 button.primary{background:#171717;color:#fff;border-color:#171717;transition:background .15s ease,border-color .15s ease,opacity .15s ease}button.primary.dirty{background:#9a9a9a;border-color:#9a9a9a;color:#fff}
 .wrap{max-width:960px;margin:22px auto 60px;background:#fff;padding:34px 30px 70px;box-shadow:0 4px 26px rgba(0,0,0,.06)}
 #editor{outline:none}
@@ -377,7 +377,7 @@ button.primary{background:#171717;color:#fff;border-color:#171717;transition:bac
 .media-actions button{background:rgba(255,255,255,.78);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.68);border-radius:999px;padding:9px 14px;font-size:13px;font-weight:700;box-shadow:0 3px 14px rgba(0,0,0,.14)}
 .media-actions button:hover{background:rgba(255,255,255,.94)}
 .tip{max-width:960px;margin:18px auto 0;color:#666;font-size:13px;padding:0 4px}
-.status{margin-left:auto;align-self:center;font-size:13px;color:#666}
+.status{width:100%;order:20;font-size:13px;font-weight:700;color:#666;margin-top:2px}.status.success{color:#0f5b32}.status.error{color:#7d1d1d}.status.neutral{color:#666}
 .format-btn{min-width:42px;font-size:18px;font-weight:750}
 .italic-btn{font-family:Georgia,serif;font-style:italic;font-weight:700}
 .emoji-holder,.link-holder{position:relative;display:inline-flex}.emoji-holder>summary,.link-holder>summary{list-style:none;cursor:pointer;user-select:none}.emoji-holder>summary::-webkit-details-marker,.link-holder>summary::-webkit-details-marker{display:none}
@@ -405,9 +405,8 @@ button.primary{background:#171717;color:#fff;border-color:#171717;transition:bac
   <button class="format-btn italic-btn has-tip" type="button" title="Italic" data-tip="Italic" onmousedown="remember();event.preventDefault()" onclick="fmt('italic')">I</button>
 
   <details class="link-holder" id="linkDetails">
-    <summary class="icon-btn has-tip" title="Link əlavə et" data-tip="Seçilmiş textə link ver" onmousedown="remember()">
+    <summary class="icon-btn has-tip" title="Link əlavə et / sil" data-tip="Link əlavə et / sil" onmousedown="remember()" onclick="return handleLinkSummary(event)">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"></path><path d="M14 11a5 5 0 0 0-7.1-.1l-2 2a5 5 0 0 0 7.1 7.1l1.1-1.1"></path></svg>
-      <span>Link</span>
     </summary>
     <span class="link-panel">
       <input id="linkInput" type="url" placeholder="https://..." autocomplete="off">
@@ -418,8 +417,8 @@ button.primary{background:#171717;color:#fff;border-color:#171717;transition:bac
   <button type="button" onmousedown="remember();event.preventDefault()" onclick="fmt('formatBlock','h2')">H2</button>
   <button type="button" onmousedown="remember();event.preventDefault()" onclick="fmt('formatBlock','p')">Text</button>
 
-  <button class="icon-btn has-tip" type="button" title="Şəkil əlavə et · Tövsiyə olunan ölçü: 1200 × 628 px" data-tip="Şəkil əlavə et · 1200 × 628 px" onclick="document.getElementById('imageInput').click()"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="16.5" cy="9" r="1.5"></circle><path d="M4 17l5-5 4 4 3-3 4 4"></path></svg><span>Şəkil</span></button>
-  <button class="icon-btn has-tip" type="button" title="Video/GIF əlavə et · Tövsiyə olunan ölçü: 1200 × 628 px" data-tip="Video/GIF əlavə et · 1200 × 628 px" onclick="document.getElementById('videoInput').click()"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="2"></rect><path d="M3 10h18"></path><path d="M7 6l3 4"></path><path d="M12 6l3 4"></path><path d="M10 13.2l5 3-5 3z" fill="currentColor" stroke="none"></path></svg><span>Video</span></button>
+  <button class="icon-btn has-tip" type="button" title="Şəkil əlavə et · avtomatik 1200 × 628 px" data-tip="Şəkil · avtomatik 1200 × 628 px" onclick="document.getElementById('imageInput').click()"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="16.5" cy="9" r="1.5"></circle><path d="M4 17l5-5 4 4 3-3 4 4"></path></svg></button>
+  <button class="icon-btn has-tip" type="button" title="Video/GIF əlavə et" data-tip="Video/GIF əlavə et" onclick="document.getElementById('videoInput').click()"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="2"></rect><path d="M3 10h18"></path><path d="M7 6l3 4"></path><path d="M12 6l3 4"></path><path d="M10 13.2l5 3-5 3z" fill="currentColor" stroke="none"></path></svg></button>
 
   <input id="imageInput" type="file" accept="image/*" hidden>
   <input id="videoInput" type="file" accept="video/*,image/gif" hidden>
@@ -427,7 +426,7 @@ button.primary{background:#171717;color:#fff;border-color:#171717;transition:bac
   <input id="videoReplaceInput" type="file" accept="video/*,image/gif" hidden>
 
   <details class="emoji-holder" id="emojiDetails">
-    <summary class="icon-btn has-tip" title="Emoji əlavə et" data-tip="Emoji əlavə et" onmousedown="remember()"><span style="font-size:20px">☺</span><span>Emoji</span></summary>
+    <summary class="icon-btn has-tip" title="Emoji əlavə et" data-tip="Emoji əlavə et" onmousedown="remember()"><span style="font-size:22px;line-height:1">☺</span></summary>
     <span class="emoji-panel"><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😀')">😀</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😃')">😃</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😄')">😄</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😁')">😁</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😊')">😊</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🙂')">🙂</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😉')">😉</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😍')">😍</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🥰')">🥰</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😘')">😘</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😎')">😎</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🤓')">🤓</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🤩')">🤩</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🥳')">🥳</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😂')">😂</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🤣')">🤣</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🥲')">🥲</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😅')">😅</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😇')">😇</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🤔')">🤔</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🧐')">🧐</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😮')">😮</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😲')">😲</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😢')">😢</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😭')">😭</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😡')">😡</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🤯')">🤯</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('👍')">👍</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('👎')">👎</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('👏')">👏</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🙌')">🙌</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('👌')">👌</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('✌️')">✌️</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🤝')">🤝</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🙏')">🙏</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('💪')">💪</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('👀')">👀</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('👁️')">👁️</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('❤️')">❤️</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🖤')">🖤</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🤍')">🤍</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('💛')">💛</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('💚')">💚</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('💙')">💙</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('💜')">💜</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🔥')">🔥</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('✨')">✨</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('⭐')">⭐</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('💡')">💡</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🎯')">🎯</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🚀')">🚀</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('✅')">✅</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('❌')">❌</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('⚡')">⚡</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🎨')">🎨</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('✏️')">✏️</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('📌')">📌</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('📍')">📍</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('📎')">📎</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🔗')">🔗</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('📷')">📷</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🎬')">🎬</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('💻')">💻</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('📱')">📱</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🏆')">🏆</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🎉')">🎉</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('💬')">💬</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🧠')">🧠</button></span>
   </details>
 
@@ -447,6 +446,12 @@ const editor=document.getElementById('editor');
 const statusEl=document.getElementById('status');
 const saveBtn=document.getElementById('saveBtn');
 let isDirty=false;
+
+function setStatus(message,type='neutral'){
+  statusEl.textContent=message;
+  statusEl.classList.remove('success','error','neutral');
+  statusEl.classList.add(type);
+}
 
 function markDirty(){
   isDirty=true;
@@ -492,15 +497,35 @@ function restoreSelection(){
   return true;
 }
 
+function getSelectedLink(){
+  const s=window.getSelection();
+  if(!s || !s.rangeCount) return null;
+  let node=s.getRangeAt(0).commonAncestorContainer;
+  if(node.nodeType!==1) node=node.parentElement;
+  return node && node.closest ? node.closest('a') : null;
+}
+
+function handleLinkSummary(e){
+  const link=getSelectedLink();
+  if(!link) return true;
+  e.preventDefault();
+  const parent=link.parentNode;
+  while(link.firstChild) parent.insertBefore(link.firstChild,link);
+  parent.removeChild(link);
+  markDirty();
+  setStatus('Link textdən çıxarıldı. Save edin.','success');
+  return false;
+}
+
 function applyLink(){
   const input=document.getElementById('linkInput');
   let href=(input.value||'').trim();
   if(!href){
-    statusEl.textContent='Linki yazın.';
+    setStatus('Linki yazın.','error');
     return;
   }
   if(!savedRange || savedRange.collapsed){
-    statusEl.textContent='Əvvəl link veriləcək texti seçin.';
+    setStatus('Əvvəl link veriləcək texti seçin.','error');
     return;
   }
   const lowerHref=href.toLowerCase();
@@ -531,7 +556,7 @@ function applyLink(){
   input.value='';
   remember();
   markDirty();
-  statusEl.textContent='Link əlavə edildi. Save edin.';
+  setStatus('Link əlavə edildi. Save edin.','success');
 }
 
 function insertEmoji(ch){
@@ -556,7 +581,7 @@ function insertEmoji(ch){
   savedRange=range.cloneRange();
   document.getElementById('emojiDetails').open=false;
   markDirty();
-  statusEl.textContent='Emoji əlavə edildi. Save edin.';
+  setStatus('Emoji əlavə edildi. Save edin.','success');
 }
 
 document.getElementById('linkInput').addEventListener('keydown',e=>{
@@ -609,7 +634,7 @@ function insertYoutube(urlValue){
   wrap.appendChild(iframe);
   insertNode(wrap);
   markDirty();
-  statusEl.textContent='YouTube player əlavə edildi. Save edin.';
+  setStatus('YouTube player əlavə edildi. Save edin.','success');
   return true;
 }
 
@@ -658,7 +683,7 @@ function mediaWrap(el){
     e.stopPropagation();
     wrap.remove();
     markDirty();
-    statusEl.textContent='Media silindi. Save basın.';
+    setStatus('Media silindi. Save basın.','success');
   };
 
   actions.appendChild(replace);
@@ -685,17 +710,50 @@ editor.addEventListener('click',e=>{
   if(media && !e.target.closest('.media-actions')) media.classList.toggle('active');
 });
 
+async function normalizeImageFile(file){
+  if(!file || !file.type.startsWith('image/') || file.type==='image/gif') return file;
+
+  const TARGET_W=1200, TARGET_H=628;
+  const bitmap=await createImageBitmap(file);
+  const canvas=document.createElement('canvas');
+  canvas.width=TARGET_W;
+  canvas.height=TARGET_H;
+  const ctx=canvas.getContext('2d');
+
+  const scale=Math.max(TARGET_W/bitmap.width,TARGET_H/bitmap.height);
+  const sw=TARGET_W/scale;
+  const sh=TARGET_H/scale;
+  const sx=Math.max(0,(bitmap.width-sw)/2);
+  const sy=Math.max(0,(bitmap.height-sh)/2);
+  ctx.drawImage(bitmap,sx,sy,sw,sh,0,0,TARGET_W,TARGET_H);
+  if(bitmap.close) bitmap.close();
+
+  let quality=.86;
+  let blob=await new Promise(r=>canvas.toBlob(r,'image/webp',quality));
+  while(blob && blob.size>350*1024 && quality>.56){
+    quality-=.08;
+    blob=await new Promise(r=>canvas.toBlob(r,'image/webp',quality));
+  }
+  if(!blob) throw new Error('image_compress_failed');
+  const base=(file.name||'image').replace(/\.[^.]+$/,'');
+  return new File([blob],base+'.webp',{type:'image/webp',lastModified:Date.now()});
+}
+
 async function addFile(file,type){
-  statusEl.textContent='Media yüklənir...';
+  setStatus('Media yüklənir...','neutral');
+  try{
+    if(type==='image') file=await normalizeImageFile(file);
+  }catch(e){
+    setStatus('Şəkli optimallaşdırmaq alınmadı.','error');
+    return;
+  }
   const fd=new FormData();
   fd.append('file',file,file.name);
   const r=await fetch(MEDIA_API_URL,{method:'POST',body:fd});
   const data=await r.json().catch(()=>({}));
 
   if(!r.ok||!data.ok){
-    statusEl.textContent=data.error==='file_too_large'
-      ? 'Fayl 20 MB-dan böyükdür.'
-      : 'Media yüklənmədi.';
+    setStatus(data.error==='file_too_large' ? 'Fayl 20 MB-dan böyükdür.' : 'Media yüklənmədi.','error');
     return;
   }
 
@@ -706,18 +764,24 @@ async function addFile(file,type){
   insertNode(el);
   mediaWrap(el);
   markDirty();
-  statusEl.textContent='Uğurla yükləndi. Save edin.';
+  setStatus('Şəkil uğurla əlavə edildi. Save edin.','success');
 }
 
 async function replaceExistingMedia(file,target){
   if(!target) return;
-  statusEl.textContent='Yeni media yüklənir...';
+  setStatus('Yeni media yüklənir...','neutral');
+  try{
+    if(file.type.startsWith('image/') && file.type!=='image/gif') file=await normalizeImageFile(file);
+  }catch(e){
+    setStatus('Şəkli optimallaşdırmaq alınmadı.','error');
+    return;
+  }
   const fd=new FormData();
   fd.append('file',file,file.name);
   const r=await fetch(MEDIA_API_URL,{method:'POST',body:fd});
   const data=await r.json().catch(()=>({}));
   if(!r.ok||!data.ok){
-    statusEl.textContent=data.error==='file_too_large' ? 'Fayl 20 MB-dan böyükdür.' : 'Media dəyişdirilmədi.';
+    setStatus(data.error==='file_too_large' ? 'Fayl 20 MB-dan böyükdür.' : 'Media dəyişdirilmədi.','error');
     return;
   }
 
@@ -737,7 +801,7 @@ async function replaceExistingMedia(file,target){
   }
   mediaWrap(newEl);
   markDirty();
-  statusEl.textContent='Media dəyişdirildi. Save basın.';
+  setStatus('Media dəyişdirildi. Save basın.','success');
   window.__replaceTarget=null;
 }
 
@@ -781,7 +845,7 @@ function cleanEditorHtml(){
 }
 
 async function saveDraft(){
-  statusEl.textContent='Yadda saxlanılır...';
+  setStatus('Yadda saxlanılır...','neutral');
   saveBtn.disabled=true;
   saveBtn.style.opacity='.72';
   const r=await fetch(API_URL,{
@@ -792,7 +856,7 @@ async function saveDraft(){
   const data=await r.json().catch(()=>({}));
 
   if(!r.ok||!data.ok){
-    statusEl.textContent='Yadda saxlamaq alınmadı.';
+    setStatus('Yadda saxlamaq alınmadı.','error');
     saveBtn.disabled=false;
     saveBtn.style.opacity='';
     markDirty();
@@ -804,11 +868,11 @@ async function saveDraft(){
   saveBtn.style.opacity='';
 
   if(data.telegram && data.telegram.ok===false){
-    statusEl.textContent='Məqalə yadda saxlanıldı, Telegram yenilənmədi.';
+    setStatus('Məqalə yadda saxlanıldı, Telegram yenilənmədi.','error');
   }else if(data.telegram && data.telegram.ok){
-    statusEl.textContent='Məqalə və Telegram uğurla yeniləndi.';
+    setStatus('Məqalə və Telegram uğurla yeniləndi.','success');
   }else{
-    statusEl.textContent='Məqalə uğurla yadda saxlanıldı.';
+    setStatus('Məqalə uğurla yadda saxlanıldı.','success');
   }
 
   setTimeout(()=>{
