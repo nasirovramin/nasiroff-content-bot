@@ -36,11 +36,14 @@ export default {
   html,body{margin:0;padding:0;background:#fff;color:#171717}
   body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;line-height:1.68}
   main{max-width:760px;margin:0 auto;padding:42px 22px 72px}
-  h1{font-size:42px;line-height:1.12;margin:0 0 28px;font-weight:750;letter-spacing:-.02em}
+  h1{font-size:42px;line-height:1.12;margin:0 0 12px;font-weight:750;letter-spacing:-.02em}
+  .meta{font-size:15px;color:#666;margin:0 0 28px}
   h2{font-size:25px;line-height:1.25;margin:38px 0 12px;font-weight:700}
   p{font-size:19px;margin:0 0 20px}
   img{display:block;width:100%;height:auto;margin:0 0 34px;border-radius:0}
   .lead{font-size:21px}
+  .back{display:inline-flex;align-items:center;justify-content:center;margin-top:32px;padding:12px 18px;border:1px solid #171717;border-radius:999px;color:#171717;text-decoration:none;font-size:16px;font-weight:650}
+  .back:hover{background:#171717;color:#fff}
   @media(max-width:640px){
     main{padding:26px 18px 56px}
     h1{font-size:34px}
@@ -52,6 +55,7 @@ export default {
 <body>
 <main>
   <h1>Bir layihəyə dörd fərqli baxış</h1>
+  <p class="meta">Ramin Nəsirov · 29 sentyabr 2026</p>
   <img src="/media/eyes.jpg" alt="Fərqli gözlər">
   <p class="lead">Edvard de Bononun Six Thinking Hats, yəni Altı düşüncə papağı metodunu çoxumuz bilirik. Mənə isə layihə üzərində işləyərkən başqa bir yanaşma daha maraqlı gəlir.</p>
   <p>Bəzən yeni ideya tapmaq üçün daha çox düşünmək yox, baxış bucağını dəyişmək lazımdır. Eyni layihəyə dörd fərqli roldan baxdığınızı təsəvvür edin.</p>
@@ -81,6 +85,7 @@ export default {
   <p>Uşaq-yarat. İsida-gələcəyi gör. Osiris-seç və təmizlə. Firon-qərar ver.</p>
   <p>Eyni layihəyə dörd dəfə baxırsınız. Amma hər dəfə başqa gözlə.</p>
   <p>Bəlkə də qədim misirlilərin heykəllər üçün gözləri ayrıca hazırlaması təsadüfi deyildi. Göz onlar üçün sadəcə görmək vasitəsi yox, xüsusi məna daşıyan bir simvol idi.</p>
+  <a class="back" href="https://t.me/nasiroff_az">← Geri qayıt</a>
 </main>
 </body>
 </html>`;
@@ -158,6 +163,35 @@ Uşaq-yarat. İsida-gələcəyi gör. Osiris-seç və təmizlə. Firon-qərar ve
     }
 
     const update = await request.json();
+
+    if (update.message?.chat?.type === "private" && update.message?.photo?.length) {
+      const photo = update.message.photo[update.message.photo.length - 1];
+      const caption = update.message.caption || "";
+
+      const testPost = await tg(env.BOT_TOKEN, "sendPhoto", {
+        chat_id: env.TEST_CHANNEL,
+        photo: photo.file_id,
+        caption,
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [[
+            { text: "✅ Paylaş", callback_data: "publish" },
+            { text: "❌ Yox", callback_data: "reject" }
+          ]]
+        }
+      });
+
+      const data = await testPost.json();
+
+      await tg(env.BOT_TOKEN, "sendMessage", {
+        chat_id: update.message.chat.id,
+        text: data.ok
+          ? "Şəkil qəbul edildi və test kanalına göndərildi ✅"
+          : "Şəkli test kanalına göndərmək alınmadı ❌"
+      });
+
+      return new Response("ok");
+    }
 
     if (update.message?.chat?.type === "private" && update.message?.text) {
       const text = update.message.text;
