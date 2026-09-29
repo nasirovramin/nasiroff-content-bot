@@ -20,17 +20,23 @@ jobs:
           node-version: "22"
       - run: npm install
       - run: npx wrangler deploy --dry-run
-      - name: Check editor inline JavaScript
+      - name: Check rendered editor JavaScript
         run: |
           node <<'NODE'
           const fs=require('fs');
           const src=fs.readFileSync('src/index.js','utf8');
-          const start=src.indexOf('<script>');
-          const end=src.indexOf('</script>', start);
-          if(start<0||end<0) throw new Error('editor script not found');
-          let js=src.slice(start+8,end);
-          js=js.split('${JSON.stringify(apiUrl)}').join('"https://example.com/api"');
-          js=js.split('${JSON.stringify(mediaApiUrl)}').join('"https://example.com/media"');
-          fs.writeFileSync('/tmp/editor.js',js);
+          const route=src.indexOf('if (url.pathname === "/edit/dord-baxis")');
+          const marker='const html = `';
+          const tplStart=src.indexOf(marker, route);
+          const tplBodyStart=tplStart+marker.length;
+          const tplEnd=src.indexOf('`;\n\n        return new Response(html', tplBodyStart);
+          if(route<0||tplStart<0||tplEnd<0) throw new Error('editor template not found');
+          const raw=src.slice(tplBodyStart,tplEnd);
+          const render=new Function('ARTICLE_TITLE','articleUrl','apiUrl','mediaApiUrl','BUILD_VERSION','return `'+raw+'`;');
+          const html=render('Title','https://example.com/article','https://example.com/api','https://example.com/media','test');
+          const s=html.indexOf('<script>');
+          const e=html.indexOf('</script>',s);
+          if(s<0||e<0) throw new Error('rendered editor script not found');
+          fs.writeFileSync('/tmp/editor-rendered.js',html.slice(s+8,e));
           NODE
-          node --check /tmp/editor.js
+          node --check /tmp/editor-rendered.js
