@@ -1,1 +1,1 @@
-trigger simplified article test v7
+trigger custom white article page v8
