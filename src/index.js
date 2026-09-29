@@ -8,9 +8,148 @@ const tg = (token, method, body) =>
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
 
+
+const enc = new TextEncoder();
+
+async function hmacHex(secret, value) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(value));
+  return [...new Uint8Array(sig)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function makeEditSig(env, articleId, userId) {
+  return hmacHex(env.BOT_TOKEN, `${articleId}:${userId}`);
+}
+
+async function validEditSig(env, articleId, userId, sig) {
+  if (!userId || !sig) return false;
+  return (await makeEditSig(env, articleId, userId)) === sig;
+}
+
+const json = (data, status = 200) => new Response(JSON.stringify(data), {
+  status,
+  headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }
+});
+
+function cleanText(html) {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractFirst(html, tag, className = "") {
+  const cls = className ? `[^>]*class=["'][^"']*${className}[^"']*["'][^>]*` : "[^>]*";
+  const re = new RegExp(`<${tag}${cls}>([\\s\\S]*?)<\\/${tag}>`, "i");
+  const m = html.match(re);
+  return m ? cleanText(m[1]) : "";
+}
+
+function telegramCaptionFromHtml(html, articleUrl) {
+  const title = extractFirst(html, "h1") || ARTICLE_TITLE;
+  const lead = extractFirst(html, "p", "lead");
+  const shortLead = lead.length > 420 ? lead.slice(0, 417).trimEnd() + "..." : lead;
+  return `<b>${title}</b>\n\n${shortLead}\n\n<a href="${articleUrl}">Ətraflı oxu</a>`;
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+
+
+    // Persistent article API. CONTENT is a Cloudflare KV binding and MEDIA is an R2 binding.
+    if (url.pathname === "/api/article/dord-baxis") {
+      const userId = url.searchParams.get("u");
+      const sig = url.searchParams.get("sig");
+      if (!(await validEditSig(env, ARTICLE_ID, userId, sig))) {
+        return json({ ok: false, error: "unauthorized" }, 401);
+      }
+
+      if (request.method === "GET") {
+        if (!env.CONTENT) return json({ ok: false, error: "storage_not_ready" }, 503);
+        const saved = await env.CONTENT.get(`article:${ARTICLE_ID}`, "json");
+        return json({ ok: true, article: saved || null });
+      }
+
+      if (request.method === "POST") {
+        if (!env.CONTENT) return json({ ok: false, error: "storage_not_ready" }, 503);
+        const body = await request.json();
+        if (!body?.html || typeof body.html !== "string") {
+          return json({ ok: false, error: "invalid_article" }, 400);
+        }
+
+        const old = await env.CONTENT.get(`article:${ARTICLE_ID}`, "json") || {};
+        const record = {
+          ...old,
+          id: ARTICLE_ID,
+          slug: ARTICLE_ID,
+          html: body.html,
+          updatedAt: new Date().toISOString()
+        };
+        await env.CONTENT.put(`article:${ARTICLE_ID}`, JSON.stringify(record));
+
+        const articleUrl = `${url.origin}/article/${ARTICLE_ID}`;
+        let telegram = null;
+        if (old.mainMessageId) {
+          const caption = telegramCaptionFromHtml(body.html, articleUrl);
+          const r = await tg(env.BOT_TOKEN, "editMessageCaption", {
+            chat_id: env.MAIN_CHANNEL,
+            message_id: old.mainMessageId,
+            caption,
+            parse_mode: "HTML"
+          });
+          telegram = await r.json();
+        }
+
+        return json({ ok: true, article: record, telegram });
+      }
+
+      return new Response("Method not allowed", { status: 405 });
+    }
+
+    if (url.pathname === "/api/media") {
+      const userId = url.searchParams.get("u");
+      const sig = url.searchParams.get("sig");
+      if (!(await validEditSig(env, ARTICLE_ID, userId, sig))) {
+        return json({ ok: false, error: "unauthorized" }, 401);
+      }
+      if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
+      if (!env.MEDIA) return json({ ok: false, error: "media_storage_not_ready" }, 503);
+
+      const form = await request.formData();
+      const file = form.get("file");
+      if (!(file instanceof File)) return json({ ok: false, error: "file_required" }, 400);
+      const safeExt = (file.name.split(".").pop() || "bin").toLowerCase().replace(/[^a-z0-9]/g, "") || "bin";
+      const key = `articles/${ARTICLE_ID}/${Date.now()}-${crypto.randomUUID()}.${safeExt}`;
+      await env.MEDIA.put(key, file.stream(), {
+        httpMetadata: { contentType: file.type || "application/octet-stream" }
+      });
+      return json({ ok: true, url: `${url.origin}/r2/${key}`, key, type: file.type });
+    }
+
+    if (url.pathname.startsWith("/r2/") && request.method === "GET") {
+      if (!env.MEDIA) return new Response("Media storage not ready", { status: 503 });
+      const key = decodeURIComponent(url.pathname.slice(4));
+      const obj = await env.MEDIA.get(key);
+      if (!obj) return new Response("Not found", { status: 404 });
+      const headers = new Headers();
+      obj.writeHttpMetadata(headers);
+      headers.set("etag", obj.httpEtag);
+      headers.set("cache-control", "public, max-age=31536000, immutable");
+      return new Response(obj.body, { headers });
+    }
 
     if (request.method === "GET") {
       const imageSource = "https://raw.githubusercontent.com/nasirovramin/nasiroff-content-bot/main.ru/assets/eyes.jpg";
@@ -27,7 +166,14 @@ export default {
       }
 
       if (url.pathname === "/edit/dord-baxis") {
+        const userId = url.searchParams.get("u");
+        const sig = url.searchParams.get("sig");
+        if (!(await validEditSig(env, ARTICLE_ID, userId, sig))) {
+          return new Response("Bu editor linki etibarsızdır.", { status: 401 });
+        }
         const articleUrl = `${url.origin}/article/dord-baxis`;
+        const apiUrl = `${url.origin}/api/article/dord-baxis?u=${encodeURIComponent(userId)}&sig=${encodeURIComponent(sig)}`;
+        const mediaApiUrl = `${url.origin}/api/media?u=${encodeURIComponent(userId)}&sig=${encodeURIComponent(sig)}`;
         const html = `<!doctype html>
 <html lang="az">
 <head>
@@ -97,6 +243,8 @@ button.primary{background:#171717;color:#fff;border-color:#171717}
 </div>
 <script>
 let savedRange=null;
+const API_URL=`${apiUrl}`;
+const MEDIA_API_URL=`${mediaApiUrl}`;
 const editor=document.getElementById('editor');
 editor.addEventListener('keyup',remember);
 editor.addEventListener('mouseup',remember);
@@ -120,18 +268,31 @@ function insertNode(node){
     s.removeAllRanges(); s.addRange(savedRange);
   }else editor.appendChild(node);
 }
-function addFile(file,type){
+async function addFile(file,type){
+  const status=document.getElementById('status');
+  status.textContent='Media yüklənir...';
+  const fd=new FormData();
+  fd.append('file',file,file.name);
+  const r=await fetch(MEDIA_API_URL,{method:'POST',body:fd});
+  const data=await r.json().catch(()=>({}));
+  if(!r.ok||!data.ok){
+    status.textContent=data.error==='media_storage_not_ready'
+      ? 'Media storage hələ qoşulmayıb.'
+      : 'Media yüklənmədi.';
+    return;
+  }
   const wrap=document.createElement('div');
   wrap.className='media-wrap';
   const el=document.createElement(type==='video'?'video':'img');
-  el.src=URL.createObjectURL(file);
+  el.src=data.url;
+  el.dataset.r2key=data.key;
   if(type==='video'){el.controls=true;el.playsInline=true}
   const rm=document.createElement('button');
   rm.type='button';rm.className='remove';rm.textContent='Sil';
   rm.onclick=()=>wrap.remove();
   wrap.appendChild(el);wrap.appendChild(rm);
   insertNode(wrap);
-  document.getElementById('status').textContent='Media əlavə edildi. Save edin.';
+  status.textContent='Uğurla yükləndi. Save edin.';
 }
 document.getElementById('imageInput').addEventListener('change',e=>{
   if(e.target.files[0]) addFile(e.target.files[0],'image');
@@ -145,14 +306,28 @@ document.getElementById('videoInput').addEventListener('change',e=>{
 async function saveDraft(){
   const status=document.getElementById('status');
   status.textContent='Yadda saxlanılır...';
-  const payload={id:'dord-baxis',html:editor.innerHTML,updatedAt:new Date().toISOString()};
-  localStorage.setItem('article:dord-baxis',JSON.stringify(payload));
-  status.textContent='Brauzerdə yadda saxlanıldı. Server yaddaşı qoşulduqda avtomatik sinxron olacaq.';
+  const r=await fetch(API_URL,{
+    method:'POST',
+    headers:{'content-type':'application/json'},
+    body:JSON.stringify({id:'dord-baxis',html:editor.innerHTML})
+  });
+  const data=await r.json().catch(()=>({}));
+  if(!r.ok||!data.ok){
+    status.textContent=data.error==='storage_not_ready'
+      ? 'Server yaddaşı hələ qoşulmayıb.'
+      : 'Yadda saxlamaq alınmadı.';
+    return;
+  }
+  status.textContent=data.telegram && data.telegram.ok
+    ? 'Yadda saxlanıldı. Məqalə və Telegram yeniləndi.'
+    : 'Yadda saxlanıldı. Məqalə yeniləndi.';
 }
-const local=localStorage.getItem('article:dord-baxis');
-if(local){
-  try{const d=JSON.parse(local); if(d.html) editor.innerHTML=d.html}catch(e){}
-}
+(async()=>{
+  const r=await fetch(API_URL);
+  if(!r.ok) return;
+  const data=await r.json();
+  if(data?.article?.html) editor.innerHTML=data.article.html;
+})().catch(()=>{});
 </script>
 </body>
 </html>`;
@@ -160,6 +335,7 @@ if(local){
       }
 
       if (url.pathname === "/article/dord-baxis") {
+        const savedArticle = env.CONTENT ? await env.CONTENT.get(`article:${ARTICLE_ID}`, "json") : null;
         const html = `<!doctype html>
 <html lang="az">
 <head>
@@ -195,6 +371,7 @@ if(local){
 </head>
 <body>
 <main>
+  ${savedArticle?.html ? savedArticle.html : `
   <h1>Bir layihəyə dörd fərqli baxış</h1>
   <p class="meta">Ramin Nəsirov · 29 sentyabr 2026</p>
   <img src="/media/eyes.jpg" alt="Fərqli gözlər">
@@ -214,6 +391,7 @@ if(local){
 
   <h2>Dörd mərhələ</h2>
   <p>Uşaq-yarat. İsida-gələcəyi gör. Osiris-seç və təmizlə. Firon-qərar ver. Eyni layihəyə dörd dəfə baxırsınız. Amma hər dəfə başqa gözlə. Bəlkə də qədim misirlilərin heykəllər üçün gözləri ayrıca hazırlaması təsadüfi deyildi. Göz onlar üçün sadəcə görmək vasitəsi yox, xüsusi məna daşıyan bir simvol idi.</p>
+  `}
   <a class="back" href="https://t.me/nasiroff_az">← Geri qayıt</a>
 </main>
 </body>
@@ -385,6 +563,18 @@ Uşaq-yarat. İsida-gələcəyi gör. Osiris-seç və təmizlə. Firon-qərar ve
           const publishedMessageId = copiedData.result.message_id;
           const articleUrl = `${new URL(request.url).origin}/article/dord-baxis`;
 
+          if (env.CONTENT) {
+            const existing = await env.CONTENT.get(`article:${ARTICLE_ID}`, "json") || {};
+            await env.CONTENT.put(`article:${ARTICLE_ID}`, JSON.stringify({
+              ...existing,
+              id: ARTICLE_ID,
+              slug: ARTICLE_ID,
+              mainMessageId: publishedMessageId,
+              publishedAt: existing.publishedAt || new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            }));
+          }
+
           // Send a private management copy back to the user who approved the post.
           await tg(env.BOT_TOKEN, "copyMessage", {
             chat_id: q.from.id,
@@ -392,12 +582,15 @@ Uşaq-yarat. İsida-gələcəyi gör. Osiris-seç və təmizlə. Firon-qərar ve
             message_id: publishedMessageId
           });
 
+          const editSig = await makeEditSig(env, ARTICLE_ID, q.from.id);
+          const editUrl = `${new URL(request.url).origin}/edit/dord-baxis?u=${encodeURIComponent(q.from.id)}&sig=${editSig}`;
+
           await tg(env.BOT_TOKEN, "sendMessage", {
             chat_id: q.from.id,
             text: `✅ Post paylaşıldı.\n\nBu onun idarəetmə nüsxəsidir. Sonradan bu paneldən məqaləyə yenidən qayıda bilərsiniz.\nPost ID: ${publishedMessageId}`,
             reply_markup: {
               inline_keyboard: [[
-                { text: "✏️ Edit", url: `${new URL(request.url).origin}/edit/dord-baxis` }
+                { text: "✏️ Edit", url: editUrl }
               ]]
             }
           });
