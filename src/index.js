@@ -38,10 +38,10 @@ export default {
   main{max-width:760px;margin:0 auto;padding:42px 22px 72px}
   h1{font-size:42px;line-height:1.12;margin:0 0 12px;font-weight:750;letter-spacing:-.02em}
   .meta{font-size:15px;color:#666;margin:0 0 28px}
-  h2{font-size:25px;line-height:1.24;margin:30px 0 10px;font-weight:300}
-  p{font-size:19px;margin:0 0 14px;font-weight:400}
+  h2{font-size:25px;line-height:1.24;margin:30px 0 10px;font-weight:500}
+  p{font-size:19px;margin:0 0 14px;font-weight:350}
   img{display:block;width:100%;height:auto;margin:0 0 34px;border-radius:0}
-  .lead{font-size:21px;font-weight:400}
+  .lead{font-size:21px;font-weight:350}
   .back{display:inline-flex;align-items:center;justify-content:center;margin-top:32px;padding:12px 18px;border:1px solid #171717;border-radius:999px;color:#171717;text-decoration:none;font-size:16px;font-weight:650}
   .back:hover{background:#171717;color:#fff}
   @media(max-width:640px){
