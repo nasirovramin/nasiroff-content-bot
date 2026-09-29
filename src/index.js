@@ -245,7 +245,84 @@ Uşaq-yarat. İsida-gələcəyi gör. Osiris-seç və təmizlə. Firon-qərar ve
             message_id: msg.message_id,
             reply_markup: { inline_keyboard: [] },
           });
+
+          const publishedMessageId = copiedData.result.message_id;
+          const articleUrl = `${new URL(request.url).origin}/article/dord-baxis`;
+
+          // Send a private management copy back to the user who approved the post.
+          await tg(env.BOT_TOKEN, "copyMessage", {
+            chat_id: q.from.id,
+            from_chat_id: env.MAIN_CHANNEL,
+            message_id: publishedMessageId
+          });
+
+          await tg(env.BOT_TOKEN, "sendMessage", {
+            chat_id: q.from.id,
+            text: `✅ Post paylaşıldı.\n\nBu onun idarəetmə nüsxəsidir. Sonradan bu paneldən məqaləyə yenidən qayıda bilərsiniz.\nPost ID: ${publishedMessageId}`,
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  { text: "👁 Preview", url: articleUrl },
+                  { text: "✏️ Edit", callback_data: `admin_edit:${publishedMessageId}` }
+                ],
+                [
+                  { text: "🖼 Cover", callback_data: `admin_cover:${publishedMessageId}` },
+                  { text: "🧩 İç media", callback_data: `admin_media:${publishedMessageId}` }
+                ],
+                [
+                  { text: "🔄 Yenilə", callback_data: `admin_update:${publishedMessageId}` }
+                ]
+              ]
+            }
+          });
         }
+      }
+
+      if (q.data?.startsWith("admin_edit:")) {
+        const id = q.data.split(":")[1];
+        await tg(env.BOT_TOKEN, "answerCallbackQuery", {
+          callback_query_id: q.id,
+          text: "Edit rejimi açıldı."
+        });
+        await tg(env.BOT_TOKEN, "sendMessage", {
+          chat_id: q.from.id,
+          text: `✏️ Edit rejimi · Post ID: ${id}\n\nDəyişmək istədiyiniz mətni bu mesaja reply olaraq göndərin.`
+        });
+        return new Response("ok");
+      }
+
+      if (q.data?.startsWith("admin_cover:")) {
+        const id = q.data.split(":")[1];
+        await tg(env.BOT_TOKEN, "answerCallbackQuery", {
+          callback_query_id: q.id,
+          text: "Cover dəyişmə rejimi açıldı."
+        });
+        await tg(env.BOT_TOKEN, "sendMessage", {
+          chat_id: q.from.id,
+          text: `🖼 Cover rejimi · Post ID: ${id}\n\nYeni başlıq şəklini/video/GIF-i bu mesaja reply olaraq göndərin.\nTövsiyə olunan ölçü: 1200 × 628 px.`
+        });
+        return new Response("ok");
+      }
+
+      if (q.data?.startsWith("admin_media:")) {
+        const id = q.data.split(":")[1];
+        await tg(env.BOT_TOKEN, "answerCallbackQuery", {
+          callback_query_id: q.id,
+          text: "Mətndaxili media rejimi açıldı."
+        });
+        await tg(env.BOT_TOKEN, "sendMessage", {
+          chat_id: q.from.id,
+          text: `🧩 Mətndaxili media · Post ID: ${id}\n\nŞəkil/video/GIF-ləri bu mesaja reply olaraq göndərin. Bir neçə media göndərə bilərsiniz.\nTövsiyə olunan ölçü: 1200 × 628 px.`
+        });
+        return new Response("ok");
+      }
+
+      if (q.data?.startsWith("admin_update:")) {
+        await tg(env.BOT_TOKEN, "answerCallbackQuery", {
+          callback_query_id: q.id,
+          text: "Preview yenilənməsi növbəti mərhələdə bu panelə bağlanacaq."
+        });
+        return new Response("ok");
       }
 
       if (q.data === "reject") {
