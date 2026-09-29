@@ -7,7 +7,7 @@ const tg = (token, method, body) =>
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "toolbar-v6";
+const BUILD_VERSION = "toolbar-v7";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -365,20 +365,18 @@ button.primary{background:#171717;color:#fff;border-color:#171717}
 #editor p{font-size:18px;line-height:1.58;margin:0 0 16px}
 #editor .lead{font-size:25px;line-height:1.23;font-weight:700;margin:0 0 28px}
 #editor img,#editor video{display:block;width:100%;height:auto;margin:22px 0 28px}.youtube-embed{position:relative;width:100%;aspect-ratio:16/9;margin:22px 0 28px}.youtube-embed iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
-.media-wrap{position:relative;display:block;isolation:isolate}
+.media-wrap{position:relative;display:block;isolation:isolate}.media-wrap[contenteditable="false"]{user-select:none}
 .media-wrap .remove{position:absolute;right:8px;top:8px;background:#fff;border:1px solid #ddd;border-radius:999px;padding:6px 9px;font-size:12px}
 .tip{max-width:960px;margin:18px auto 0;color:#666;font-size:13px;padding:0 4px}
 .status{margin-left:auto;align-self:center;font-size:13px;color:#666}
 .format-btn{min-width:42px;font-size:18px;font-weight:750}
 .italic-btn{font-family:Georgia,serif;font-style:italic;font-weight:700}
-.emoji-holder{position:relative;display:inline-flex}
+.emoji-holder,.link-holder{position:relative;display:inline-flex}.emoji-holder>summary,.link-holder>summary{list-style:none}.emoji-holder>summary::-webkit-details-marker,.link-holder>summary::-webkit-details-marker{display:none}
 .emoji-panel{position:absolute;top:calc(100% + 8px);left:0;z-index:80;width:290px;max-height:250px;overflow:auto;background:#fff;border:1px solid #ddd;border-radius:12px;padding:10px;box-shadow:0 12px 35px rgba(0,0,0,.16);display:none;grid-template-columns:repeat(7,1fr);gap:5px}
 .emoji-panel.open{display:grid}
 .emoji-panel button{border:0;background:transparent;padding:6px;font-size:21px;border-radius:7px}
 .emoji-panel button:hover{background:#f1f1f1}
-.link-holder{position:relative;display:inline-flex}
-.link-panel{position:absolute;top:calc(100% + 8px);left:0;z-index:85;display:none;gap:6px;align-items:center;background:#fff;border:1px solid #ddd;border-radius:10px;padding:8px;box-shadow:0 12px 35px rgba(0,0,0,.16)}
-.link-panel.open{display:flex}
+.link-panel{position:absolute;top:calc(100% + 8px);left:0;z-index:85;display:flex;gap:6px;align-items:center;background:#fff;border:1px solid #ddd;border-radius:10px;padding:8px;box-shadow:0 12px 35px rgba(0,0,0,.16)}
 .link-panel input{width:240px;max-width:55vw;border:1px solid #ccc;border-radius:7px;padding:8px;font:inherit}
 .link-panel button{padding:8px 10px}
 @media(max-width:640px){
@@ -393,27 +391,36 @@ button.primary{background:#171717;color:#fff;border-color:#171717}
 </head>
 <body>
 <div class="toolbar">
-  <button class="format-btn has-tip" type="button" title="Bold" data-tip="Bold" onmousedown="event.preventDefault()" onclick="fmt('bold')"><b>B</b></button>
-  <button class="format-btn italic-btn has-tip" type="button" title="Italic" data-tip="Italic" onmousedown="event.preventDefault()" onclick="fmt('italic')">I</button>
-  <span class="link-holder">
-    <button class="icon-btn has-tip" type="button" title="Link əlavə et" data-tip="Seçilmiş textə link ver" onmousedown="event.preventDefault()" onclick="toggleLinkPanel(event)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"></path><path d="M14 11a5 5 0 0 0-7.1-.1l-2 2a5 5 0 0 0 7.1 7.1l1.1-1.1"></path></svg><span>Link</span></button>
-    <span class="link-panel" id="linkPanel">
+  <button class="format-btn has-tip" type="button" title="Bold" data-tip="Bold" onmousedown="remember();event.preventDefault()" onclick="fmt('bold')"><b>B</b></button>
+  <button class="format-btn italic-btn has-tip" type="button" title="Italic" data-tip="Italic" onmousedown="remember();event.preventDefault()" onclick="fmt('italic')">I</button>
+
+  <details class="link-holder" id="linkDetails" onmousedown="remember()">
+    <summary class="icon-btn has-tip" title="Link əlavə et" data-tip="Seçilmiş textə link ver">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"></path><path d="M14 11a5 5 0 0 0-7.1-.1l-2 2a5 5 0 0 0 7.1 7.1l1.1-1.1"></path></svg>
+      <span>Link</span>
+    </summary>
+    <span class="link-panel">
       <input id="linkInput" type="url" placeholder="https://..." autocomplete="off">
       <button type="button" onclick="applyLink()">OK</button>
     </span>
-  </span>
-  <button type="button" onmousedown="event.preventDefault()" onclick="fmt('formatBlock','h2')">H2</button>
-  <button type="button" onmousedown="event.preventDefault()" onclick="fmt('formatBlock','p')">Text</button>
+  </details>
+
+  <button type="button" onmousedown="remember();event.preventDefault()" onclick="fmt('formatBlock','h2')">H2</button>
+  <button type="button" onmousedown="remember();event.preventDefault()" onclick="fmt('formatBlock','p')">Text</button>
+
   <button class="icon-btn has-tip" type="button" title="Şəkil əlavə et · Tövsiyə olunan ölçü: 1200 × 628 px" data-tip="Şəkil əlavə et · 1200 × 628 px" onclick="document.getElementById('imageInput').click()"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="16.5" cy="9" r="1.5"></circle><path d="M4 17l5-5 4 4 3-3 4 4"></path></svg><span>Şəkil</span></button>
   <button class="icon-btn has-tip" type="button" title="Video/GIF əlavə et · Tövsiyə olunan ölçü: 1200 × 628 px" data-tip="Video/GIF əlavə et · 1200 × 628 px" onclick="document.getElementById('videoInput').click()"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="2"></rect><path d="M3 10h18"></path><path d="M7 6l3 4"></path><path d="M12 6l3 4"></path><path d="M10 13.2l5 3-5 3z" fill="currentColor" stroke="none"></path></svg><span>Video</span></button>
+
   <input id="imageInput" type="file" accept="image/*" hidden>
   <input id="videoInput" type="file" accept="video/*,image/gif" hidden>
   <input id="imageReplaceInput" type="file" accept="image/*" hidden>
   <input id="videoReplaceInput" type="file" accept="video/*,image/gif" hidden>
-  <span class="emoji-holder">
-    <button class="icon-btn has-tip" id="emojiToggle" type="button" title="Emoji əlavə et" data-tip="Emoji əlavə et" onmousedown="event.preventDefault()" onclick="toggleEmoji(event)"><span style="font-size:20px">☺</span><span>Emoji</span></button>
-    <span class="emoji-panel" id="emojiPanel"></span>
-  </span>
+
+  <details class="emoji-holder" id="emojiDetails" onmousedown="remember()">
+    <summary class="icon-btn has-tip" title="Emoji əlavə et" data-tip="Emoji əlavə et"><span style="font-size:20px">☺</span><span>Emoji</span></summary>
+    <span class="emoji-panel"><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😀')">😀</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😃')">😃</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😄')">😄</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😁')">😁</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😊')">😊</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🙂')">🙂</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😉')">😉</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😍')">😍</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🥰')">🥰</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😘')">😘</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😎')">😎</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🤓')">🤓</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🤩')">🤩</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🥳')">🥳</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😂')">😂</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🤣')">🤣</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🥲')">🥲</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😅')">😅</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😇')">😇</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🤔')">🤔</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🧐')">🧐</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😮')">😮</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😲')">😲</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😢')">😢</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😭')">😭</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😡')">😡</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🤯')">🤯</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('👍')">👍</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('👎')">👎</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('👏')">👏</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🙌')">🙌</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('👌')">👌</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('✌️')">✌️</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🤝')">🤝</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🙏')">🙏</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('💪')">💪</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('👀')">👀</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('👁️')">👁️</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('❤️')">❤️</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🖤')">🖤</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🤍')">🤍</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('💛')">💛</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('💚')">💚</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('💙')">💙</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('💜')">💜</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🔥')">🔥</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('✨')">✨</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('⭐')">⭐</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('💡')">💡</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🎯')">🎯</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🚀')">🚀</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('✅')">✅</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('❌')">❌</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('⚡')">⚡</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🎨')">🎨</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('✏️')">✏️</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('📌')">📌</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('📍')">📍</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('📎')">📎</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🔗')">🔗</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('📷')">📷</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🎬')">🎬</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('💻')">💻</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('📱')">📱</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🏆')">🏆</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🎉')">🎉</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('💬')">💬</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🧠')">🧠</button></span>
+  </details>
+
   <a class="btn" href="${articleUrl}" target="_blank">Preview</a>
   <button class="primary" type="button" onclick="saveDraft()">Save</button>
   <span id="status" class="status">Edit rejimi · ${BUILD_VERSION}</span>
@@ -459,98 +466,70 @@ function restoreSelection(){
   return true;
 }
 
-function toggleLinkPanel(e){
-  e.stopPropagation();
-  if(!savedRange || savedRange.collapsed){
-    statusEl.textContent='Əvvəl link veriləcək texti seçin.';
-    return;
-  }
-  document.getElementById('emojiPanel')?.classList.remove('open');
-  const panel=document.getElementById('linkPanel');
-  panel.classList.toggle('open');
-  if(panel.classList.contains('open')){
-    setTimeout(()=>document.getElementById('linkInput').focus(),0);
-  }
-}
-
 function applyLink(){
+  const input=document.getElementById('linkInput');
+  let href=(input.value||'').trim();
+  if(!href){
+    statusEl.textContent='Linki yazın.';
+    return;
+  }
   if(!savedRange || savedRange.collapsed){
     statusEl.textContent='Əvvəl link veriləcək texti seçin.';
     return;
   }
-  let href=document.getElementById('linkInput').value.trim();
-  if(!href) return;
   if(!/^https?:\/\//i.test(href) && !/^mailto:/i.test(href)) href='https://'+href;
+
   editor.focus();
   restoreSelection();
-  document.execCommand('createLink',false,href);
+
+  const sel=window.getSelection();
+  if(!sel.rangeCount) return;
+  const range=sel.getRangeAt(0);
+  const a=document.createElement('a');
+  a.href=href;
+  a.target='_blank';
+  a.rel='noopener noreferrer';
+  try{
+    range.surroundContents(a);
+  }catch(err){
+    document.execCommand('createLink',false,href);
+  }
+
+  document.getElementById('linkDetails').open=false;
+  input.value='';
   remember();
-  document.getElementById('linkPanel').classList.remove('open');
-  document.getElementById('linkInput').value='';
   statusEl.textContent='Link əlavə edildi. Save edin.';
 }
 
-const EMOJIS=['😀','😃','😄','😁','😊','🙂','😉','😍','🥰','😘','😎','🤓','🤩','🥳','😂','🤣','🥲','😅','😇','🤔','🧐','😮','😲','😢','😭','😡','🤯','👍','👎','👏','🙌','👌','✌️','🤝','🙏','💪','👀','👁️','❤️','🖤','🤍','💛','💚','💙','💜','🔥','✨','⭐','💡','🎯','🚀','✅','❌','⚡','🎨','✏️','📌','📍','📎','🔗','📷','🎬','💻','📱','🏆','🎉','💬','🧠'];
-
-function buildEmojiPanel(){
-  const panel=document.getElementById('emojiPanel');
-  if(panel.children.length) return;
-  EMOJIS.forEach(ch=>{
-    const b=document.createElement('button');
-    b.type='button';
-    b.textContent=ch;
-    b.setAttribute('contenteditable','false');
-    b.onmousedown=e=>e.preventDefault();
-    b.onclick=e=>{
-      e.stopPropagation();
-      insertEmoji(ch);
-    };
-    panel.appendChild(b);
-  });
-}
-
-function toggleEmoji(e){
-  e.stopPropagation();
-  document.getElementById('linkPanel')?.classList.remove('open');
+function insertEmoji(ch){
+  editor.focus();
   if(!savedRange){
-    editor.focus();
     const r=document.createRange();
     r.selectNodeContents(editor);
     r.collapse(false);
     savedRange=r.cloneRange();
   }
-  buildEmojiPanel();
-  document.getElementById('emojiPanel').classList.toggle('open');
-}
-
-document.getElementById('linkInput')?.addEventListener('keydown',e=>{
-  if(e.key==='Enter'){e.preventDefault();applyLink();}
-});
-
-function insertEmoji(ch){
-  editor.focus();
-  if(savedRange){
-    restoreSelection();
-    const node=document.createTextNode(ch);
-    const r=window.getSelection().getRangeAt(0);
-    r.deleteContents();
-    r.insertNode(node);
-    r.setStartAfter(node);
-    r.collapse(true);
-    const s=window.getSelection();
-    s.removeAllRanges();
-    s.addRange(r);
-    savedRange=r.cloneRange();
-  }else{
-    editor.appendChild(document.createTextNode(ch));
-  }
-  document.getElementById('emojiPanel').classList.remove('open');
+  restoreSelection();
+  const sel=window.getSelection();
+  if(!sel.rangeCount) return;
+  const range=sel.getRangeAt(0);
+  range.deleteContents();
+  const node=document.createTextNode(ch);
+  range.insertNode(node);
+  range.setStartAfter(node);
+  range.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(range);
+  savedRange=range.cloneRange();
+  document.getElementById('emojiDetails').open=false;
   statusEl.textContent='Emoji əlavə edildi. Save edin.';
 }
 
-document.addEventListener('click',e=>{
-  if(!e.target.closest('.emoji-holder')) document.getElementById('emojiPanel')?.classList.remove('open');
-  if(!e.target.closest('.link-holder')) document.getElementById('linkPanel')?.classList.remove('open');
+document.getElementById('linkInput').addEventListener('keydown',e=>{
+  if(e.key==='Enter'){
+    e.preventDefault();
+    applyLink();
+  }
 });
 
 function insertNode(node){
@@ -611,23 +590,40 @@ function mediaWrap(el){
     wrap.appendChild(el);
   }
 
-  if(wrap.querySelector('.media-actions')) return;
+  wrap.setAttribute('contenteditable','false');
 
-  const actions=document.createElement('div');
+  let actions=wrap.querySelector('.media-actions');
+  if(actions) actions.remove();
+
+  actions=document.createElement('div');
   actions.className='media-actions';
-  actions.setAttribute('contenteditable','false');
 
   const replace=document.createElement('button');
   replace.type='button';
-  replace.textContent='Edit';
   replace.className='media-edit';
-
+  replace.textContent='Edit';
+  replace.onclick=function(e){
+    e.preventDefault();
+    e.stopPropagation();
+    window.__replaceTarget=wrap.querySelector('img,video');
+    const target=window.__replaceTarget;
+    if(!target) return;
+    const input=target.tagName==='VIDEO'
+      ? document.getElementById('videoReplaceInput')
+      : document.getElementById('imageReplaceInput');
+    input.click();
+  };
 
   const rm=document.createElement('button');
   rm.type='button';
-  rm.textContent='Delete';
   rm.className='media-delete';
-
+  rm.textContent='Delete';
+  rm.onclick=function(e){
+    e.preventDefault();
+    e.stopPropagation();
+    wrap.remove();
+    statusEl.textContent='Media silindi. Save basın.';
+  };
 
   actions.appendChild(replace);
   actions.appendChild(rm);
@@ -638,31 +634,6 @@ function enhanceMedia(){
   editor.querySelectorAll('img,video').forEach(mediaWrap);
 }
 
-editor.addEventListener('pointerdown',e=>{
-  const editBtn=e.target.closest('.media-edit');
-  const deleteBtn=e.target.closest('.media-delete');
-  if(!editBtn && !deleteBtn) return;
-
-  e.preventDefault();
-  e.stopPropagation();
-
-  const wrap=e.target.closest('.media-wrap');
-  if(!wrap) return;
-
-  if(deleteBtn){
-    wrap.remove();
-    statusEl.textContent='Media silindi. Save basın.';
-    return;
-  }
-
-  const el=wrap.querySelector('img,video');
-  if(!el) return;
-  window.__replaceTarget=el;
-  const input=el.tagName==='VIDEO'
-    ? document.getElementById('videoReplaceInput')
-    : document.getElementById('imageReplaceInput');
-  input.click();
-}, true);
 
 editor.addEventListener('click',e=>{
   const media=e.target.closest('.media-wrap');
