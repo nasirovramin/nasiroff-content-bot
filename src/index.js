@@ -380,6 +380,8 @@ button.primary{background:#171717;color:#fff;border-color:#171717}
   <button class="icon-btn has-tip" type="button" title="Video/GIF əlavə et · Tövsiyə olunan ölçü: 1200 × 628 px" data-tip="Video/GIF əlavə et · 1200 × 628 px" onclick="document.getElementById('videoInput').click()"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="2"></rect><path d="M3 10h18"></path><path d="M7 6l3 4"></path><path d="M12 6l3 4"></path><path d="M10 13.2l5 3-5 3z" fill="currentColor" stroke="none"></path></svg><span>Video/GIF</span></button>
   <input id="imageInput" type="file" accept="image/*" hidden>
   <input id="videoInput" type="file" accept="video/*,image/gif" hidden>
+  <input id="imageReplaceInput" type="file" accept="image/*" hidden>
+  <input id="videoReplaceInput" type="file" accept="video/*,image/gif" hidden>
   <a class="btn" href="${articleUrl}" target="_blank">Preview</a>
   <button class="primary" type="button" onclick="saveDraft()">Save</button>
   <span id="status" class="status">Edit rejimi</span>
@@ -462,13 +464,30 @@ function mediaWrap(el){
   wrap.className='media-wrap';
   el.parentNode.insertBefore(wrap,el);
   wrap.appendChild(el);
+
+  const actions=document.createElement('div');
+  actions.className='media-actions';
+  actions.setAttribute('contenteditable','false');
+
+  const replace=document.createElement('button');
+  replace.type='button';
+  replace.textContent='Dəyiş';
+  replace.onclick=()=>{
+    window.__replaceTarget=el;
+    const input=el.tagName==='VIDEO'
+      ? document.getElementById('videoReplaceInput')
+      : document.getElementById('imageReplaceInput');
+    input.click();
+  };
+
   const rm=document.createElement('button');
   rm.type='button';
-  rm.className='remove';
   rm.textContent='Sil';
-  rm.setAttribute('contenteditable','false');
   rm.onclick=()=>wrap.remove();
-  wrap.appendChild(rm);
+
+  actions.appendChild(replace);
+  actions.appendChild(rm);
+  wrap.appendChild(actions);
 }
 
 function enhanceMedia(){
@@ -510,6 +529,31 @@ async function addFile(file,type){
   statusEl.textContent='Uğurla yükləndi. Save & Update edin.';
 }
 
+async function replaceExistingMedia(file,target){
+  if(!target) return;
+  statusEl.textContent='Yeni media yüklənir...';
+  const fd=new FormData();
+  fd.append('file',file,file.name);
+  const r=await fetch(MEDIA_API_URL,{method:'POST',body:fd});
+  const data=await r.json().catch(()=>({}));
+  if(!r.ok||!data.ok){
+    statusEl.textContent=data.error==='file_too_large' ? 'Fayl 20 MB-dan böyükdür.' : 'Media dəyişdirilmədi.';
+    return;
+  }
+
+  const wantVideo = !file.type.startsWith('image/');
+  let newEl=target;
+  if((wantVideo && target.tagName!=='VIDEO') || (!wantVideo && target.tagName!=='IMG')){
+    newEl=document.createElement(wantVideo?'video':'img');
+    if(wantVideo){newEl.controls=true;newEl.playsInline=true}
+    target.replaceWith(newEl);
+  }
+  newEl.src=data.url;
+  newEl.dataset.mediaKey=data.key;
+  statusEl.textContent='Media dəyişdirildi. Save basın.';
+  window.__replaceTarget=null;
+}
+
 document.getElementById('imageInput').addEventListener('change',e=>{
   if(e.target.files[0]) addFile(e.target.files[0],'image');
   e.target.value='';
@@ -518,6 +562,18 @@ document.getElementById('imageInput').addEventListener('change',e=>{
 document.getElementById('videoInput').addEventListener('change',e=>{
   const f=e.target.files[0];
   if(f) addFile(f,f.type==='image/gif'?'image':'video');
+  e.target.value='';
+});
+
+document.getElementById('imageReplaceInput').addEventListener('change',e=>{
+  const f=e.target.files[0];
+  if(f) replaceExistingMedia(f,window.__replaceTarget);
+  e.target.value='';
+});
+
+document.getElementById('videoReplaceInput').addEventListener('change',e=>{
+  const f=e.target.files[0];
+  if(f) replaceExistingMedia(f,window.__replaceTarget);
   e.target.value='';
 });
 
@@ -532,7 +588,7 @@ editor.addEventListener('paste',e=>{
 
 function cleanEditorHtml(){
   const clone=editor.cloneNode(true);
-  clone.querySelectorAll('.remove').forEach(x=>x.remove());
+  clone.querySelectorAll('.media-actions').forEach(x=>x.remove());
   clone.querySelectorAll('[contenteditable]').forEach(x=>x.removeAttribute('contenteditable'));
   return clone.innerHTML;
 }
