@@ -7,7 +7,7 @@ const tg = (token, method, body) =>
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "save-dirty-state";
+const BUILD_VERSION = "preview-edit-return";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -341,6 +341,7 @@ export default {
         }
 
         const articleUrl = `${url.origin}/article/dord-baxis`;
+        const previewUrl = `${articleUrl}?preview=1&u=${encodeURIComponent(userId)}&sig=${encodeURIComponent(sig)}`;
         const apiUrl = `${url.origin}/api/article/dord-baxis?u=${encodeURIComponent(userId)}&sig=${encodeURIComponent(sig)}`;
         const mediaApiUrl = `${url.origin}/api/media?u=${encodeURIComponent(userId)}&sig=${encodeURIComponent(sig)}`;
 
@@ -430,7 +431,7 @@ button.primary{background:#171717;color:#fff;border-color:#171717;transition:bac
     <span class="emoji-panel"><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😀')">😀</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😃')">😃</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😄')">😄</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😁')">😁</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😊')">😊</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🙂')">🙂</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😉')">😉</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😍')">😍</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🥰')">🥰</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😘')">😘</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😎')">😎</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🤓')">🤓</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🤩')">🤩</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🥳')">🥳</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😂')">😂</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🤣')">🤣</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🥲')">🥲</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😅')">😅</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😇')">😇</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🤔')">🤔</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🧐')">🧐</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😮')">😮</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😲')">😲</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😢')">😢</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😭')">😭</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('😡')">😡</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🤯')">🤯</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('👍')">👍</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('👎')">👎</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('👏')">👏</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🙌')">🙌</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('👌')">👌</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('✌️')">✌️</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🤝')">🤝</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🙏')">🙏</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('💪')">💪</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('👀')">👀</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('👁️')">👁️</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('❤️')">❤️</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🖤')">🖤</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🤍')">🤍</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('💛')">💛</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('💚')">💚</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('💙')">💙</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('💜')">💜</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🔥')">🔥</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('✨')">✨</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('⭐')">⭐</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('💡')">💡</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🎯')">🎯</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🚀')">🚀</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('✅')">✅</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('❌')">❌</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('⚡')">⚡</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🎨')">🎨</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('✏️')">✏️</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('📌')">📌</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('📍')">📍</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('📎')">📎</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🔗')">🔗</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('📷')">📷</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🎬')">🎬</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('💻')">💻</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('📱')">📱</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🏆')">🏆</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🎉')">🎉</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('💬')">💬</button><button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('🧠')">🧠</button></span>
   </details>
 
-  <a class="btn" href="${articleUrl}" target="_blank">Preview</a>
+  <a class="btn" href="${previewUrl}" target="_blank">Preview</a>
   <button class="primary" id="saveBtn" type="button" onclick="saveDraft()">Save</button>
   <span id="status" class="status">Edit rejimi</span>
 </div>
@@ -809,6 +810,13 @@ async function saveDraft(){
   }else{
     statusEl.textContent='Məqalə uğurla yadda saxlanıldı.';
   }
+
+  setTimeout(()=>{
+    window.close();
+    setTimeout(()=>{
+      if(document.visibilityState==='visible' && history.length>1) history.back();
+    },250);
+  },350);
 }
 
 (async()=>{
@@ -839,6 +847,17 @@ markSaved();
       if (url.pathname === "/article/dord-baxis") {
         const savedArticle = await cmsGetArticle(env);
         const bodyHtml = savedArticle?.html || defaultArticleHtml();
+
+        let backHref = "https://t.me/nasiroff_az";
+        let backLabel = "← Geri qayıt";
+        if (url.searchParams.get("preview") === "1") {
+          const previewUserId = url.searchParams.get("u");
+          const previewSig = url.searchParams.get("sig");
+          if (await validEditSig(env, ARTICLE_ID, previewUserId, previewSig)) {
+            backHref = `${url.origin}/edit/dord-baxis?u=${encodeURIComponent(previewUserId)}&sig=${encodeURIComponent(previewSig)}`;
+            backLabel = "← Edit rejiminə qayıt";
+          }
+        }
         const html = `<!doctype html>
 <html lang="az">
 <head>
@@ -879,7 +898,7 @@ main a:not(.back){color:#0b57d0;text-decoration:underline;text-underline-offset:
 <body>
 <main>
 ${bodyHtml}
-<a class="back" href="https://t.me/nasiroff_az">← Geri qayıt</a>
+<a class="back" href="${backHref}">${backLabel}</a>
 </main>
 </body>
 </html>`;
