@@ -7,7 +7,7 @@ const tg = (token, method, body) =>
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "toolbar-v5";
+const BUILD_VERSION = "toolbar-v6";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -416,7 +416,7 @@ button.primary{background:#171717;color:#fff;border-color:#171717}
   </span>
   <a class="btn" href="${articleUrl}" target="_blank">Preview</a>
   <button class="primary" type="button" onclick="saveDraft()">Save</button>
-  <span id="status" class="status">Edit rejimi</span>
+  <span id="status" class="status">Edit rejimi · ${BUILD_VERSION}</span>
 </div>
 <div class="tip">Mətndə istədiyin yerə kursoru qoy, sonra şəkil/video düyməsini bas. Media həmin nöqtəyə əlavə olunacaq.</div>
 <div class="wrap">
@@ -620,25 +620,14 @@ function mediaWrap(el){
   const replace=document.createElement('button');
   replace.type='button';
   replace.textContent='Edit';
-  replace.onclick=(e)=>{
-    e.preventDefault();
-    e.stopPropagation();
-    window.__replaceTarget=el;
-    const input=el.tagName==='VIDEO'
-      ? document.getElementById('videoReplaceInput')
-      : document.getElementById('imageReplaceInput');
-    input.click();
-  };
+  replace.className='media-edit';
+
 
   const rm=document.createElement('button');
   rm.type='button';
   rm.textContent='Delete';
-  rm.onclick=(e)=>{
-    e.preventDefault();
-    e.stopPropagation();
-    wrap.remove();
-    statusEl.textContent='Media silindi. Save basın.';
-  };
+  rm.className='media-delete';
+
 
   actions.appendChild(replace);
   actions.appendChild(rm);
@@ -648,6 +637,32 @@ function mediaWrap(el){
 function enhanceMedia(){
   editor.querySelectorAll('img,video').forEach(mediaWrap);
 }
+
+editor.addEventListener('pointerdown',e=>{
+  const editBtn=e.target.closest('.media-edit');
+  const deleteBtn=e.target.closest('.media-delete');
+  if(!editBtn && !deleteBtn) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+
+  const wrap=e.target.closest('.media-wrap');
+  if(!wrap) return;
+
+  if(deleteBtn){
+    wrap.remove();
+    statusEl.textContent='Media silindi. Save basın.';
+    return;
+  }
+
+  const el=wrap.querySelector('img,video');
+  if(!el) return;
+  window.__replaceTarget=el;
+  const input=el.tagName==='VIDEO'
+    ? document.getElementById('videoReplaceInput')
+    : document.getElementById('imageReplaceInput');
+  input.click();
+}, true);
 
 editor.addEventListener('click',e=>{
   const media=e.target.closest('.media-wrap');
@@ -917,7 +932,7 @@ ${bodyHtml}
       if (text === "/edit") {
         const userId = update.message.from.id;
         const sig = await makeEditSig(env, ARTICLE_ID, userId);
-        const editUrl = `${url.origin}/edit/dord-baxis?u=${encodeURIComponent(userId)}&sig=${sig}`;
+        const editUrl = `${url.origin}/edit/dord-baxis?u=${encodeURIComponent(userId)}&sig=${sig}&v=${BUILD_VERSION}`;
         await tg(env.BOT_TOKEN, "sendMessage", {
           chat_id: update.message.chat.id,
           text: "Məqaləni açıb birbaşa səhifənin üzərində redaktə edə bilərsiniz.",
@@ -994,7 +1009,7 @@ ${bodyHtml}
           });
 
           const editSig = await makeEditSig(env, ARTICLE_ID, q.from.id);
-          const editUrl = `${url.origin}/edit/dord-baxis?u=${encodeURIComponent(q.from.id)}&sig=${editSig}`;
+          const editUrl = `${url.origin}/edit/dord-baxis?u=${encodeURIComponent(q.from.id)}&sig=${editSig}&v=${BUILD_VERSION}`;
 
           await tg(env.BOT_TOKEN, "sendMessage", {
             chat_id: q.from.id,
