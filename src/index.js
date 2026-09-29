@@ -373,7 +373,7 @@ button.primary{background:#171717;color:#fff;border-color:#171717}
 </head>
 <body>
 <div class="toolbar">
-  <button type="button" onclick="fmt('bold')"><b>B</b></button>
+  <button type="button" onclick="fmt('bold')">Bold</button>
   <button type="button" onclick="fmt('formatBlock','h2')">Başlıq</button>
   <button type="button" onclick="fmt('formatBlock','p')">Mətn</button>
   <button type="button" onclick="document.getElementById('imageInput').click()">🖼 Şəkil əlavə et<br><small>(1200 × 628 px)</small></button>
