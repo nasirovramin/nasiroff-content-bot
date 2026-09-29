@@ -7,7 +7,7 @@ const tg = (token, method, body) =>
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "save-refresh-latest";
+const BUILD_VERSION = "linkedin-privacy-page";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -211,6 +211,46 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const imageSource = "https://raw.githubusercontent.com/nasirovramin/nasiroff-content-bot/main.ru/assets/eyes.jpg";
+
+    if (url.pathname === "/privacy") {
+      const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Privacy Policy · NASIROFF Content Bot</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;max-width:760px;margin:0 auto;padding:48px 22px;color:#171717;line-height:1.65}
+h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:20px}p{margin:0 0 14px;color:#333}
+</style>
+</head>
+<body>
+<h1>Privacy Policy</h1>
+<p>Last updated: 30 September 2026</p>
+<p>NASIROFF Content Bot is a personal content publishing tool used to prepare and publish content to connected services such as LinkedIn and Telegram.</p>
+<h2>Information we process</h2>
+<p>We may process basic account identifiers, authorization tokens, post text, links, images, videos, and publishing status that are necessary to provide the service.</p>
+<h2>How information is used</h2>
+<p>Information is used only to authenticate the connected account, prepare content, publish user-approved posts, and maintain the publishing workflow.</p>
+<h2>Data sharing</h2>
+<p>Information is shared only with the connected platforms when required to perform user-requested publishing actions. We do not sell personal information.</p>
+<h2>Data retention</h2>
+<p>Authorization and content data are retained only as long as needed for the publishing workflow or until access is revoked or the data is deleted.</p>
+<h2>Security</h2>
+<p>Access credentials and tokens are stored using restricted server-side configuration and are not intentionally exposed in public pages or client-side code.</p>
+<h2>Your choices</h2>
+<p>You may revoke LinkedIn or other connected-service access at any time from the relevant platform settings.</p>
+<h2>Contact</h2>
+<p>For privacy questions, contact the owner of NASIROFF Content Bot through the associated LinkedIn profile.</p>
+</body>
+</html>`;
+      return new Response(html, {
+        headers: {
+          "content-type": "text/html; charset=utf-8",
+          "cache-control": "no-store"
+        }
+      });
+    }
 
     if (url.pathname === "/version") {
       return new Response(BUILD_VERSION, {
