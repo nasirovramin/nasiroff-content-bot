@@ -7,7 +7,7 @@ const tg = (token, method, body) =>
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "telegram-archive-through-2025";
+const BUILD_VERSION = "one-time-telegram-publish";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -2085,7 +2085,53 @@ ${bodyHtml}
         return json({ article: articleUrl, telegram: await postRes.json() });
       }
 
-      if (url.pathname === "/setup-webhook") {
+  
+    if (url.pathname === "/publish-latest-telegram-7f4c91") {
+      const latestArticleId = await cmsGetLatestArticleId(env);
+      const article = await cmsGetArticle(env, latestArticleId);
+      if (!article?.html) return json({ ok: false, error: "latest_article_missing" }, 404);
+
+      const articleUrl = `${url.origin}/article/${encodeURIComponent(latestArticleId)}`;
+      const caption = telegramCaptionFromHtml(article.html, articleUrl);
+      const cover = article.html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] || "";
+
+      let sent;
+      if (cover) {
+        sent = await tg(env.BOT_TOKEN, "sendPhoto", {
+          chat_id: env.MAIN_CHANNEL,
+          photo: new URL(cover, url.origin).href,
+          caption,
+          parse_mode: "HTML"
+        });
+      } else {
+        sent = await tg(env.BOT_TOKEN, "sendMessage", {
+          chat_id: env.MAIN_CHANNEL,
+          text: caption,
+          parse_mode: "HTML",
+          disable_web_page_preview: false
+        });
+      }
+
+      const data = await sent.json();
+      if (!data.ok) return json({ ok: false, telegram: data }, 502);
+
+      await cmsPutArticle(env, {
+        ...article,
+        mainMessageId: data.result.message_id,
+        mainMessageType: cover ? "media" : "text",
+        publishedAt: article.publishedAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }, latestArticleId);
+
+      return json({
+        ok: true,
+        articleId: latestArticleId,
+        messageId: data.result.message_id,
+        mainChannel: env.MAIN_CHANNEL
+      });
+    }
+
+    if (url.pathname === "/setup-webhook") {
         const r = await tg(env.BOT_TOKEN, "setWebhook", { url: `${url.origin}/` });
         return json(await r.json());
       }
