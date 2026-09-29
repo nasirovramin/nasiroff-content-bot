@@ -7,7 +7,7 @@ const tg = (token, method, body) =>
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "media-controls-v2";
+const BUILD_VERSION = "media-controls-v3";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -512,6 +512,18 @@ function mediaWrap(el){
   wrap.appendChild(actions);
 }
 
+function enhanceMedia(){
+  editor.querySelectorAll('img,video').forEach(mediaWrap);
+}
+
+editor.addEventListener('click',e=>{
+  const media=e.target.closest('.media-wrap');
+  editor.querySelectorAll('.media-wrap.active').forEach(x=>{
+    if(x!==media) x.classList.remove('active');
+  });
+  if(media && !e.target.closest('.media-actions')) media.classList.toggle('active');
+});
+
 async function addFile(file,type){
   statusEl.textContent='Media yüklənir...';
   const fd=new FormData();
@@ -530,21 +542,9 @@ async function addFile(file,type){
   el.src=data.url;
   el.dataset.mediaKey=data.key;
   if(type==='video'){el.controls=true;el.playsInline=true}
-
-  const wrap=document.createElement('div');
-  wrap.className='media-wrap';
-  wrap.appendChild(el);
-
-  const rm=document.createElement('button');
-  rm.type='button';
-  rm.className='remove';
-  rm.textContent='Sil';
-  rm.setAttribute('contenteditable','false');
-  rm.onclick=()=>wrap.remove();
-  wrap.appendChild(rm);
-
-  insertNode(wrap);
-  statusEl.textContent='Uğurla yükləndi. Save & Update edin.';
+  insertNode(el);
+  mediaWrap(el);
+  statusEl.textContent='Uğurla yükləndi. Save edin.';
 }
 
 async function replaceExistingMedia(file,target){
@@ -568,6 +568,12 @@ async function replaceExistingMedia(file,target){
   }
   newEl.src=data.url;
   newEl.dataset.mediaKey=data.key;
+  const wrap=newEl.parentElement;
+  if(wrap && wrap.classList.contains('media-wrap')){
+    const oldActions=wrap.querySelector('.media-actions');
+    if(oldActions) oldActions.remove();
+  }
+  mediaWrap(newEl);
   statusEl.textContent='Media dəyişdirildi. Save basın.';
   window.__replaceTarget=null;
 }
