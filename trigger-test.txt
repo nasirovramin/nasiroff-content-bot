@@ -1,1 +1,1 @@
-trigger custom white article page v8
+trigger direct image source fix v9
