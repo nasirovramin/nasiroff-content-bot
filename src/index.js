@@ -92,17 +92,33 @@ Uşaq kimi yarat, gələcəyi düşün, ideyanı sərt şəkildə seç və sonda
 
 <a href="${pageData.result.url}">Ətraflı oxu</a>`;
 
-        const postRes = await tg(env.BOT_TOKEN, "sendPhoto", {
-          chat_id: env.TEST_CHANNEL,
-          photo: imageUrl,
-          caption,
-          parse_mode: "HTML",
-          reply_markup: {
-            inline_keyboard: [[
-              { text: "✅ Paylaş", callback_data: "publish" },
-              { text: "❌ Yox", callback_data: "reject" }
-            ]]
-          }
+        const imageRes = await fetch(imageUrl);
+        if (!imageRes.ok) {
+          return new Response(JSON.stringify({
+            telegraph: pageData,
+            telegram: { ok: false, description: "Worker could not fetch image: " + imageRes.status }
+          }, null, 2), {
+            status: 500,
+            headers: { "content-type": "application/json; charset=utf-8" },
+          });
+        }
+
+        const imageBlob = await imageRes.blob();
+        const form = new FormData();
+        form.append("chat_id", env.TEST_CHANNEL);
+        form.append("photo", imageBlob, "eyes.jpg");
+        form.append("caption", caption);
+        form.append("parse_mode", "HTML");
+        form.append("reply_markup", JSON.stringify({
+          inline_keyboard: [[
+            { text: "✅ Paylaş", callback_data: "publish" },
+            { text: "❌ Yox", callback_data: "reject" }
+          ]]
+        }));
+
+        const postRes = await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/sendPhoto`, {
+          method: "POST",
+          body: form
         });
         const postData = await postRes.json();
 
