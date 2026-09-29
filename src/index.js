@@ -7,7 +7,7 @@ const tg = (token, method, body) =>
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "linkedin-privacy-page";
+const BUILD_VERSION = "linkedin-oauth-ready";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -113,6 +113,38 @@ async function cmsDeleteMedia(env, key) {
   return cmsStub(env).fetch(`https://cms.internal/media/${encodeURIComponent(key)}`, { method: "DELETE" });
 }
 
+async function cmsGetLinkedIn(env) {
+  const r = await cmsStub(env).fetch("https://cms.internal/linkedin");
+  if (!r.ok) return null;
+  return r.json();
+}
+
+async function cmsPutLinkedIn(env, data) {
+  return cmsStub(env).fetch("https://cms.internal/linkedin", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(data)
+  });
+}
+
+async function cmsGetLinkedInState(env) {
+  const r = await cmsStub(env).fetch("https://cms.internal/linkedin-state");
+  if (!r.ok) return null;
+  return r.json();
+}
+
+async function cmsPutLinkedInState(env, data) {
+  return cmsStub(env).fetch("https://cms.internal/linkedin-state", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(data)
+  });
+}
+
+async function cmsDeleteLinkedInState(env) {
+  return cmsStub(env).fetch("https://cms.internal/linkedin-state", { method: "DELETE" });
+}
+
 export class CmsStore {
   constructor(ctx, env) {
     this.ctx = ctx;
@@ -130,6 +162,34 @@ export class CmsStore {
       if (request.method === "PUT") {
         const article = await request.json();
         await this.ctx.storage.put("article", article);
+        return json({ ok: true });
+      }
+    }
+
+    if (url.pathname === "/linkedin") {
+      if (request.method === "GET") {
+        const data = await this.ctx.storage.get("linkedin");
+        return json(data || null);
+      }
+      if (request.method === "PUT") {
+        const data = await request.json();
+        await this.ctx.storage.put("linkedin", data);
+        return json({ ok: true });
+      }
+    }
+
+    if (url.pathname === "/linkedin-state") {
+      if (request.method === "GET") {
+        const data = await this.ctx.storage.get("linkedin:state");
+        return json(data || null);
+      }
+      if (request.method === "PUT") {
+        const data = await request.json();
+        await this.ctx.storage.put("linkedin:state", data);
+        return json({ ok: true });
+      }
+      if (request.method === "DELETE") {
+        await this.ctx.storage.delete("linkedin:state");
         return json({ ok: true });
       }
     }
@@ -211,6 +271,135 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const imageSource = "https://raw.githubusercontent.com/nasirovramin/nasiroff-content-bot/main.ru/assets/eyes.jpg";
+
+    if (url.pathname === "/linkedin/connect") {
+      if (!env.LINKEDIN_CLIENT_ID) {
+        return new Response("LINKEDIN_CLIENT_ID hələ Worker-də əlavə edilməyib.", { status: 500 });
+      }
+
+      const state = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
+      await cmsPutLinkedInState(env, {
+        state,
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 10 * 60 * 1000
+      });
+
+      const redirectUri = `${url.origin}/linkedin/callback`;
+      const auth = new URL("https://www.linkedin.com/oauth/v2/authorization");
+      auth.searchParams.set("response_type", "code");
+      auth.searchParams.set("client_id", env.LINKEDIN_CLIENT_ID);
+      auth.searchParams.set("redirect_uri", redirectUri);
+      auth.searchParams.set("state", state);
+      auth.searchParams.set("scope", "openid profile email w_member_social");
+
+      return Response.redirect(auth.toString(), 302);
+    }
+
+    if (url.pathname === "/linkedin/callback") {
+      const error = url.searchParams.get("error");
+      if (error) {
+        const desc = url.searchParams.get("error_description") || error;
+        return new Response(`LinkedIn bağlantısı ləğv edildi və ya xəta baş verdi: ${desc}`, {
+          status: 400,
+          headers: { "content-type": "text/plain; charset=utf-8" }
+        });
+      }
+
+      if (!env.LINKEDIN_CLIENT_ID || !env.LINKEDIN_CLIENT_SECRET) {
+        return new Response("LinkedIn Client ID və ya Client Secret Worker-də yoxdur.", { status: 500 });
+      }
+
+      const code = url.searchParams.get("code");
+      const returnedState = url.searchParams.get("state");
+      const savedState = await cmsGetLinkedInState(env);
+
+      if (!code || !returnedState || !savedState?.state ||
+          returnedState !== savedState.state ||
+          Date.now() > Number(savedState.expiresAt || 0)) {
+        await cmsDeleteLinkedInState(env);
+        return new Response("LinkedIn OAuth state etibarsızdır və ya vaxtı bitib. Yenidən /linkedin/connect açın.", {
+          status: 401,
+          headers: { "content-type": "text/plain; charset=utf-8" }
+        });
+      }
+
+      await cmsDeleteLinkedInState(env);
+
+      const redirectUri = `${url.origin}/linkedin/callback`;
+      const tokenBody = new URLSearchParams({
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: redirectUri,
+        client_id: env.LINKEDIN_CLIENT_ID,
+        client_secret: env.LINKEDIN_CLIENT_SECRET
+      });
+
+      const tokenRes = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: tokenBody.toString()
+      });
+      const tokenData = await tokenRes.json().catch(() => ({}));
+
+      if (!tokenRes.ok || !tokenData.access_token) {
+        return new Response("LinkedIn access token almaq mümkün olmadı.", {
+          status: 502,
+          headers: { "content-type": "text/plain; charset=utf-8" }
+        });
+      }
+
+      let profile = null;
+      try {
+        const profileRes = await fetch("https://api.linkedin.com/v2/userinfo", {
+          headers: { authorization: `Bearer ${tokenData.access_token}` }
+        });
+        if (profileRes.ok) profile = await profileRes.json();
+      } catch {}
+
+      const expiresIn = Number(tokenData.expires_in || 0);
+      const connected = {
+        accessToken: tokenData.access_token,
+        expiresIn,
+        expiresAt: expiresIn ? Date.now() + expiresIn * 1000 : null,
+        scope: tokenData.scope || "openid profile email w_member_social",
+        profile: profile ? {
+          sub: profile.sub || null,
+          name: profile.name || null,
+          givenName: profile.given_name || null,
+          familyName: profile.family_name || null,
+          email: profile.email || null,
+          picture: profile.picture || null
+        } : null,
+        connectedAt: new Date().toISOString()
+      };
+      await cmsPutLinkedIn(env, connected);
+
+      const displayName = connected.profile?.name || "LinkedIn hesabı";
+      const html = `<!doctype html>
+<html lang="az"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LinkedIn qoşuldu</title>
+<style>body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;max-width:680px;margin:0 auto;padding:60px 22px;color:#171717}.ok{font-size:46px}h1{font-size:32px;margin:10px 0}p{font-size:17px;line-height:1.55;color:#444}</style>
+</head><body><div class="ok">✅</div><h1>LinkedIn qoşuldu</h1><p><strong>${displayName}</strong> hesabı NASIROFF Content Bot-a uğurla bağlandı.</p><p>Bu pəncərəni bağlaya bilərsiniz.</p></body></html>`;
+      return new Response(html, {
+        headers: {
+          "content-type": "text/html; charset=utf-8",
+          "cache-control": "no-store"
+        }
+      });
+    }
+
+    if (url.pathname === "/linkedin/status") {
+      const li = await cmsGetLinkedIn(env);
+      if (!li?.accessToken) return json({ connected: false });
+
+      return json({
+        connected: true,
+        expiresAt: li.expiresAt || null,
+        connectedAt: li.connectedAt || null,
+        profile: li.profile || null,
+        scope: li.scope || null
+      });
+    }
 
     if (url.pathname === "/privacy") {
       const html = `<!doctype html>
