@@ -1,1 +1,1 @@
-trigger telegraph teaser manual test v4
+trigger after direct-image-upload fix v5
