@@ -7,7 +7,7 @@ const tg = (token, method, body) =>
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "editor-fix-final";
+const BUILD_VERSION = "editor-runtime-fix";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -485,7 +485,8 @@ function applyLink(){
     statusEl.textContent='Əvvəl link veriləcək texti seçin.';
     return;
   }
-  if(!/^https?:\/\//i.test(href) && !/^mailto:/i.test(href)) href='https://'+href;
+  const lowerHref=href.toLowerCase();
+  if(!lowerHref.startsWith('http://') && !lowerHref.startsWith('https://') && !lowerHref.startsWith('mailto:')) href='https://'+href;
 
   editor.focus();
   restoreSelection();
