@@ -7,7 +7,7 @@ const tg = (token, method, body) =>
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "link-preview-fix";
+const BUILD_VERSION = "save-dirty-state";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -358,7 +358,7 @@ export default {
 html,body{margin:0;background:#f4f4f4;color:#171717;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}
 .toolbar{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.96);backdrop-filter:blur(10px);border-bottom:1px solid #ddd;padding:10px 14px;display:flex;gap:8px;flex-wrap:wrap}
 button,.btn{border:1px solid #cfcfcf;background:#fff;color:#171717;border-radius:9px;padding:9px 12px;font-size:14px;font-weight:650;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:7px}.icon-btn svg{width:22px;height:22px;display:block;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.has-tip{position:relative}.has-tip::after{content:attr(data-tip);position:absolute;left:50%;top:calc(100% + 8px);transform:translateX(-50%);background:#171717;color:#fff;font-size:12px;font-weight:500;line-height:1.35;padding:7px 9px;border-radius:7px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .15s ease;z-index:50}.has-tip:hover::after,.has-tip:focus-visible::after{opacity:1}
-button.primary{background:#171717;color:#fff;border-color:#171717}
+button.primary{background:#171717;color:#fff;border-color:#171717;transition:background .15s ease,border-color .15s ease,opacity .15s ease}button.primary.dirty{background:#9a9a9a;border-color:#9a9a9a;color:#fff}
 .wrap{max-width:960px;margin:22px auto 60px;background:#fff;padding:34px 30px 70px;box-shadow:0 4px 26px rgba(0,0,0,.06)}
 #editor{outline:none}
 #editor h1{font-size:54px;line-height:1.03;margin:0 0 12px;font-weight:800;letter-spacing:-.035em}
@@ -431,7 +431,7 @@ button.primary{background:#171717;color:#fff;border-color:#171717}
   </details>
 
   <a class="btn" href="${articleUrl}" target="_blank">Preview</a>
-  <button class="primary" type="button" onclick="saveDraft()">Save</button>
+  <button class="primary" id="saveBtn" type="button" onclick="saveDraft()">Save</button>
   <span id="status" class="status">Edit rejimi</span>
 </div>
 <div class="tip">Mətndə istədiyin yerə kursoru qoy, sonra şəkil/video düyməsini bas. Media həmin nöqtəyə əlavə olunacaq.</div>
@@ -444,10 +444,25 @@ const API_URL=${JSON.stringify(apiUrl)};
 const MEDIA_API_URL=${JSON.stringify(mediaApiUrl)};
 const editor=document.getElementById('editor');
 const statusEl=document.getElementById('status');
+const saveBtn=document.getElementById('saveBtn');
+let isDirty=false;
+
+function markDirty(){
+  isDirty=true;
+  saveBtn.classList.add('dirty');
+  saveBtn.title='Dəyişikliklər yadda saxlanmayıb';
+}
+
+function markSaved(){
+  isDirty=false;
+  saveBtn.classList.remove('dirty');
+  saveBtn.title='Bütün dəyişikliklər yadda saxlanılıb';
+}
 
 editor.addEventListener('keyup',remember);
 editor.addEventListener('mouseup',remember);
 editor.addEventListener('touchend',remember);
+editor.addEventListener('input',markDirty);
 document.addEventListener('selectionchange',()=>{
   const s=window.getSelection();
   if(!s || !s.rangeCount) return;
@@ -465,6 +480,7 @@ function fmt(cmd,val){
   editor.focus();
   document.execCommand(cmd,false,val||null);
   remember();
+  markDirty();
 }
 
 function restoreSelection(){
@@ -513,6 +529,7 @@ function applyLink(){
   document.getElementById('linkDetails').open=false;
   input.value='';
   remember();
+  markDirty();
   statusEl.textContent='Link əlavə edildi. Save edin.';
 }
 
@@ -537,6 +554,7 @@ function insertEmoji(ch){
   sel.addRange(range);
   savedRange=range.cloneRange();
   document.getElementById('emojiDetails').open=false;
+  markDirty();
   statusEl.textContent='Emoji əlavə edildi. Save edin.';
 }
 
@@ -589,6 +607,7 @@ function insertYoutube(urlValue){
   iframe.allowFullscreen=true;
   wrap.appendChild(iframe);
   insertNode(wrap);
+  markDirty();
   statusEl.textContent='YouTube player əlavə edildi. Save edin.';
   return true;
 }
@@ -637,6 +656,7 @@ function mediaWrap(el){
     e.preventDefault();
     e.stopPropagation();
     wrap.remove();
+    markDirty();
     statusEl.textContent='Media silindi. Save basın.';
   };
 
@@ -684,6 +704,7 @@ async function addFile(file,type){
   if(type==='video'){el.controls=true;el.playsInline=true}
   insertNode(el);
   mediaWrap(el);
+  markDirty();
   statusEl.textContent='Uğurla yükləndi. Save edin.';
 }
 
@@ -714,6 +735,7 @@ async function replaceExistingMedia(file,target){
     if(oldActions) oldActions.remove();
   }
   mediaWrap(newEl);
+  markDirty();
   statusEl.textContent='Media dəyişdirildi. Save basın.';
   window.__replaceTarget=null;
 }
@@ -759,6 +781,8 @@ function cleanEditorHtml(){
 
 async function saveDraft(){
   statusEl.textContent='Yadda saxlanılır...';
+  saveBtn.disabled=true;
+  saveBtn.style.opacity='.72';
   const r=await fetch(API_URL,{
     method:'POST',
     headers:{'content-type':'application/json'},
@@ -768,8 +792,15 @@ async function saveDraft(){
 
   if(!r.ok||!data.ok){
     statusEl.textContent='Yadda saxlamaq alınmadı.';
+    saveBtn.disabled=false;
+    saveBtn.style.opacity='';
+    markDirty();
     return;
   }
+
+  markSaved();
+  saveBtn.disabled=false;
+  saveBtn.style.opacity='';
 
   if(data.telegram && data.telegram.ok===false){
     statusEl.textContent='Məqalə yadda saxlanıldı, Telegram yenilənmədi.';
@@ -786,8 +817,10 @@ async function saveDraft(){
   const data=await r.json();
   if(data?.article?.html) editor.innerHTML=data.article.html;
   enhanceMedia();
+  markSaved();
 })().catch(()=>enhanceMedia());
 enhanceMedia();
+markSaved();
 </script>
 </body>
 </html>`;
