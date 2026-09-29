@@ -10,7 +10,7 @@ export default {
     const url = new URL(request.url);
 
     if (request.method === "GET") {
-      const imageSource = "https://raw.githubusercontent.com/nasirovramin/nasiroff-content-bot/e02bff651f45882c31b4d9e3f4123165abad4679/assets/eyes.jpg";
+      const imageSource = "https://raw.githubusercontent.com/nasirovramin/nasiroff-content-bot/main.ru/assets/eyes.jpg";
 
       if (url.pathname === "/media/eyes.jpg") {
         const img = await fetch(imageSource);
