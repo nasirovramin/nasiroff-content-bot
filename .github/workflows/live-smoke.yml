@@ -36,7 +36,7 @@ jobs:
           for i in {1..12}; do
             V="$(curl --fail --show-error --silent "https://nasiroff-content-bot.nasirovramin.workers.dev/version" || true)"
             echo "version=$V"
-            if [ "$V" = "media-controls-v2" ]; then exit 0; fi
+            if [ "$V" = "media-controls-v3" ]; then exit 0; fi
             sleep 10
           done
           exit 1
