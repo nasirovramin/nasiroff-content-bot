@@ -376,8 +376,8 @@ button.primary{background:#171717;color:#fff;border-color:#171717}
   <button type="button" onclick="fmt('bold')">Bold</button>
   <button type="button" onclick="fmt('formatBlock','h2')">H2</button>
   <button type="button" onclick="fmt('formatBlock','p')">Mətn</button>
-  <button type="button" onclick="document.getElementById('imageInput').click()">🖼</button>
-  <button type="button" onclick="document.getElementById('videoInput').click()">🎞</button>
+  <button type="button" onclick="document.getElementById('imageInput').click()">🖼 Şəkil</button>
+  <button type="button" onclick="document.getElementById('videoInput').click()">🎬 Video/GIF</button>
   <input id="imageInput" type="file" accept="image/*" hidden>
   <input id="videoInput" type="file" accept="video/*,image/gif" hidden>
   <a class="btn" href="${articleUrl}" target="_blank">Preview</a>
