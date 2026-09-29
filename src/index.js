@@ -7,7 +7,7 @@ const tg = (token, method, body) =>
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "toolbar-ui-image-opt";
+const BUILD_VERSION = "toolbar-premium-ui";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -357,9 +357,17 @@ export default {
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;background:#f4f4f4;color:#171717;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}
-.toolbar{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.96);backdrop-filter:blur(10px);border-bottom:1px solid #ddd;padding:10px 14px;display:flex;gap:8px;flex-wrap:wrap}
-button,.btn{border:1px solid #cfcfcf;background:#fff;color:#171717;border-radius:12px;min-height:48px;padding:10px 14px;font-size:14px;font-weight:650;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:7px}.icon-btn{width:48px;padding:0}.icon-btn svg{width:22px;height:22px;display:block;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.has-tip{position:relative}.has-tip::after{content:attr(data-tip);position:absolute;left:50%;top:calc(100% + 8px);transform:translateX(-50%);background:#171717;color:#fff;font-size:12px;font-weight:500;line-height:1.35;padding:7px 9px;border-radius:7px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .15s ease;z-index:50}.has-tip:hover::after,.has-tip:focus-visible::after{opacity:1}
-button.primary{background:#171717;color:#fff;border-color:#171717;transition:background .15s ease,border-color .15s ease,opacity .15s ease}button.primary.dirty{background:#9a9a9a;border-color:#9a9a9a;color:#fff}
+.toolbar{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.97);backdrop-filter:blur(10px);border-bottom:1px solid #e3e3e3;padding:14px 20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.toolbar button,.toolbar .btn,.toolbar summary.icon-btn{height:58px;min-height:58px;border:1px solid #d3d3d3;background:#fff;color:#171717;border-radius:16px;padding:0 22px;font-size:16px;font-weight:700;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:background .15s ease,border-color .15s ease,transform .08s ease}
+.toolbar button:hover,.toolbar .btn:hover,.toolbar summary.icon-btn:hover{background:#f7f7f7;border-color:#bdbdbd}
+.toolbar button:active,.toolbar .btn:active,.toolbar summary.icon-btn:active{transform:translateY(1px)}
+.toolbar .icon-btn{width:58px;min-width:58px;padding:0}
+.toolbar .icon-btn svg{width:26px;height:26px;display:block;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.toolbar .format-btn{min-width:58px;padding:0 16px;font-size:24px}
+.toolbar .italic-btn{font-family:Georgia,serif;font-style:italic;font-weight:700}
+.toolbar a.btn{min-width:118px}
+.has-tip{position:relative}.has-tip::after{content:attr(data-tip);position:absolute;left:50%;top:calc(100% + 8px);transform:translateX(-50%);background:#171717;color:#fff;font-size:12px;font-weight:500;line-height:1.35;padding:7px 9px;border-radius:7px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .15s ease;z-index:50}.has-tip:hover::after,.has-tip:focus-visible::after{opacity:1}
+.toolbar button.primary{min-width:96px;background:#171717;color:#fff;border-color:#171717}.toolbar button.primary:hover{background:#222;border-color:#222}.toolbar button.primary.dirty{background:#9a9a9a;border-color:#9a9a9a;color:#fff}
 .wrap{max-width:960px;margin:22px auto 60px;background:#fff;padding:34px 30px 70px;box-shadow:0 4px 26px rgba(0,0,0,.06)}
 #editor{outline:none}
 #editor h1{font-size:54px;line-height:1.03;margin:0 0 12px;font-weight:800;letter-spacing:-.035em}
@@ -378,8 +386,6 @@ button.primary{background:#171717;color:#fff;border-color:#171717;transition:bac
 .media-actions button:hover{background:rgba(255,255,255,.94)}
 .tip{max-width:960px;margin:18px auto 0;color:#666;font-size:13px;padding:0 4px}
 .status{width:100%;order:20;font-size:13px;font-weight:700;color:#666;margin-top:2px}.status.success{color:#0f5b32}.status.error{color:#7d1d1d}.status.neutral{color:#666}
-.format-btn{min-width:42px;font-size:18px;font-weight:750}
-.italic-btn{font-family:Georgia,serif;font-style:italic;font-weight:700}
 .emoji-holder,.link-holder{position:relative;display:inline-flex}.emoji-holder>summary,.link-holder>summary{list-style:none;cursor:pointer;user-select:none}.emoji-holder>summary::-webkit-details-marker,.link-holder>summary::-webkit-details-marker{display:none}
 .emoji-panel{position:absolute;top:calc(100% + 8px);left:0;z-index:80;width:290px;max-height:250px;overflow:auto;background:#fff;border:1px solid #ddd;border-radius:12px;padding:10px;box-shadow:0 12px 35px rgba(0,0,0,.16);display:none;grid-template-columns:repeat(7,1fr);gap:5px}
 .emoji-holder[open]>.emoji-panel{display:grid}
@@ -389,6 +395,14 @@ button.primary{background:#171717;color:#fff;border-color:#171717;transition:bac
 .link-holder[open]>.link-panel{display:flex}
 .link-panel input{width:240px;max-width:55vw;border:1px solid #ccc;border-radius:7px;padding:8px;font:inherit}
 .link-panel button{padding:8px 10px}
+@media(max-width:900px){
+  .toolbar{padding:10px 12px;gap:7px}
+  .toolbar button,.toolbar .btn,.toolbar summary.icon-btn{height:50px;min-height:50px;border-radius:13px;padding:0 15px;font-size:14px}
+  .toolbar .icon-btn{width:50px;min-width:50px;padding:0}
+  .toolbar .format-btn{min-width:50px;font-size:20px}
+  .toolbar a.btn{min-width:96px}
+  .toolbar button.primary{min-width:82px}
+}
 @media(max-width:640px){
   .wrap{margin:0;background:#fff;box-shadow:none;padding:22px 18px 48px}
   #editor h1{font-size:36px}
