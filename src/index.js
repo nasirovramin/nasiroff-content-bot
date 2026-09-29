@@ -38,7 +38,7 @@ export default {
   main{max-width:760px;margin:0 auto;padding:42px 22px 72px}
   h1{font-size:42px;line-height:1.12;margin:0 0 12px;font-weight:750;letter-spacing:-.02em}
   .meta{font-size:15px;color:#666;margin:0 0 28px}
-  h2{font-size:25px;line-height:1.24;margin:30px 0 10px;font-weight:500}
+  h2{font-size:25px;line-height:1.24;margin:30px 0 10px;font-weight:300}
   p{font-size:19px;margin:0 0 14px;font-weight:400}
   img{display:block;width:100%;height:auto;margin:0 0 34px;border-radius:0}
   .lead{font-size:21px;font-weight:400}
