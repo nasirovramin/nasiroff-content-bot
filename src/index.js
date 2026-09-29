@@ -260,19 +260,9 @@ Uşaq-yarat. İsida-gələcəyi gör. Osiris-seç və təmizlə. Firon-qərar ve
             chat_id: q.from.id,
             text: `✅ Post paylaşıldı.\n\nBu onun idarəetmə nüsxəsidir. Sonradan bu paneldən məqaləyə yenidən qayıda bilərsiniz.\nPost ID: ${publishedMessageId}`,
             reply_markup: {
-              inline_keyboard: [
-                [
-                  { text: "👁 Preview", url: articleUrl },
-                  { text: "✏️ Edit", callback_data: `admin_edit:${publishedMessageId}` }
-                ],
-                [
-                  { text: "🖼 Cover", callback_data: `admin_cover:${publishedMessageId}` },
-                  { text: "🧩 İç media", callback_data: `admin_media:${publishedMessageId}` }
-                ],
-                [
-                  { text: "🔄 Yenilə", callback_data: `admin_update:${publishedMessageId}` }
-                ]
-              ]
+              inline_keyboard: [[
+                { text: "✏️ Edit", callback_data: `admin_edit:${publishedMessageId}` }
+              ]]
             }
           });
         }
