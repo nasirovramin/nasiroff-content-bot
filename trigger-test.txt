@@ -1,1 +1,1 @@
-trigger valid jpeg test v6
+trigger simplified article test v7
