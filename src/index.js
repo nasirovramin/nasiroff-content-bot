@@ -7,9 +7,29 @@ const tg = (token, method, body) =>
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-
-
 const enc = new TextEncoder();
+
+const defaultArticleHtml = () => `
+  <h1>Bir layihəyə dörd fərqli baxış</h1>
+  <p class="meta">Ramin Nəsirov · 29 sentyabr 2026</p>
+  <img src="/media/eyes.jpg" alt="Fərqli gözlər">
+  <p class="lead">Edvard de Bononun Six Thinking Hats, yəni Altı düşüncə papağı metodunu çoxumuz bilirik. Mənə isə layihə üzərində işləyərkən başqa bir yanaşma daha maraqlı gəlir. Bəzən yeni ideya tapmaq üçün daha çox düşünmək yox, baxış bucağını dəyişmək lazımdır. Eyni layihəyə dörd fərqli roldan baxdığınızı təsəvvür edin.</p>
+  <h2>Birinci baxış-uşaq</h2>
+  <p>Burada hər şey mümkündür. Bu alınmaz, müştəri qəbul etməz, büdcə çatmaz kimi fikirləri bir müddət kənara qoyursunuz. Forma, məna, material, texnologiya və ideyalarla oynayırsınız. Bir-biri ilə əlaqəsi olmayan şeyləri də birləşdirirsiniz. Bu mərhələdə məqsəd dərhal doğru cavabı tapmaq deyil. Məqsəd mümkün qədər çox variant yaratmaqdır.</p>
+  <h2>İkinci baxış-İsida</h2>
+  <p>İsida qədim Misirdə analıq, qayğı və qoruma ilə bağlı obrazdır. Burada ideyanın yalnız bu gününə yox, gələcəyinə baxırsınız. Bu həll insana nə verir? İstifadəçi üçün rahatdırmı? Bir neçə ildən sonra da mənası qalacaqmı? Dizaynı yalnız görüntü kimi yox, insan, istifadəçi təcrübəsi, biznes və gələcək nəticələrlə birlikdə düşünürsünüz.</p>
+  <h2>Üçüncü baxış-Osiris</h2>
+  <p>İndi ideyalara daha sərt baxmaq vaxtıdır. Faktlara baxırsınız, müqayisə edirsiniz, ölçürsünüz. Hansı fikir həqiqətən işləyir? Hansı sadəcə maraqlı görünür? Hansı hissə artıqdır? Zəif variantları çıxarırsınız. Güclü ideyanı təmizləyib daha aydın sistemə çevirirsiniz. Kreativlik yalnız ideya yaratmaq deyil. Nədən imtina etməyi bilmək də onun bir hissəsidir.</p>
+  <h2>Dördüncü baxış-firon</h2>
+  <p>Bu artıq qərar mərhələsidir. Araşdırmısınız, variant yaratmısınız, müqayisə etmisiniz. İndi seçim etmək lazımdır. Burada təcrübə, zövq və intuisiya işə düşür. Bəzən daha təhlükəsiz yolu, bəzən isə daha riskli və fərqli istiqaməti seçirsiniz. Creative Director üçün əsas məsələ yalnız yaxşı ideyanı görmək deyil. Hansı ideyanın arxasında dayanacağını seçməkdir.</p>
+  <h2>Dörd mərhələ</h2>
+  <p>Uşaq-yarat. İsida-gələcəyi gör. Osiris-seç və təmizlə. Firon-qərar ver. Eyni layihəyə dörd dəfə baxırsınız. Amma hər dəfə başqa gözlə. Bəlkə də qədim misirlilərin heykəllər üçün gözləri ayrıca hazırlaması təsadüfi deyildi. Göz onlar üçün sadəcə görmək vasitəsi yox, xüsusi məna daşıyan bir simvol idi.</p>
+`;
+
+const json = (data, status = 200) => new Response(JSON.stringify(data), {
+  status,
+  headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }
+});
 
 async function hmacHex(secret, value) {
   const key = await crypto.subtle.importKey(
@@ -31,11 +51,6 @@ async function validEditSig(env, articleId, userId, sig) {
   if (!userId || !sig) return false;
   return (await makeEditSig(env, articleId, userId)) === sig;
 }
-
-const json = (data, status = 200) => new Response(JSON.stringify(data), {
-  status,
-  headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }
-});
 
 function cleanText(html) {
   return html
@@ -64,12 +79,135 @@ function telegramCaptionFromHtml(html, articleUrl) {
   return `<b>${title}</b>\n\n${shortLead}\n\n<a href="${articleUrl}">Ətraflı oxu</a>`;
 }
 
+function extractMediaKeys(html) {
+  const out = [];
+  const re = /\/media-store\/([^"'?\s>]+)/g;
+  let m;
+  while ((m = re.exec(html))) {
+    try { out.push(decodeURIComponent(m[1])); } catch { out.push(m[1]); }
+  }
+  return [...new Set(out)];
+}
+
+function cmsStub(env) {
+  const id = env.CMS.idFromName("main");
+  return env.CMS.get(id);
+}
+
+async function cmsGetArticle(env) {
+  const r = await cmsStub(env).fetch("https://cms.internal/article");
+  if (!r.ok) return null;
+  return r.json();
+}
+
+async function cmsPutArticle(env, record) {
+  return cmsStub(env).fetch("https://cms.internal/article", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(record)
+  });
+}
+
+async function cmsDeleteMedia(env, key) {
+  return cmsStub(env).fetch(`https://cms.internal/media/${encodeURIComponent(key)}`, { method: "DELETE" });
+}
+
+export class CmsStore {
+  constructor(ctx, env) {
+    this.ctx = ctx;
+    this.env = env;
+  }
+
+  async fetch(request) {
+    const url = new URL(request.url);
+
+    if (url.pathname === "/article") {
+      if (request.method === "GET") {
+        const article = await this.ctx.storage.get("article");
+        return json(article || null);
+      }
+      if (request.method === "PUT") {
+        const article = await request.json();
+        await this.ctx.storage.put("article", article);
+        return json({ ok: true });
+      }
+    }
+
+    if (url.pathname === "/media" && request.method === "POST") {
+      const contentType = request.headers.get("content-type") || "application/octet-stream";
+      const extMap = {
+        "image/jpeg": "jpg",
+        "image/png": "png",
+        "image/webp": "webp",
+        "image/gif": "gif",
+        "video/mp4": "mp4",
+        "video/webm": "webm",
+        "video/quicktime": "mov"
+      };
+      const ext = extMap[contentType] || "bin";
+      const key = `${Date.now()}-${crypto.randomUUID()}.${ext}`;
+      const data = new Uint8Array(await request.arrayBuffer());
+      const maxChunk = 1500000;
+      const chunks = Math.ceil(data.byteLength / maxChunk);
+
+      for (let i = 0; i < chunks; i++) {
+        const start = i * maxChunk;
+        const end = Math.min(start + maxChunk, data.byteLength);
+        await this.ctx.storage.put(`media:${key}:${i}`, data.slice(start, end).buffer);
+      }
+
+      await this.ctx.storage.put(`media:${key}:meta`, {
+        key,
+        contentType,
+        size: data.byteLength,
+        chunks,
+        createdAt: new Date().toISOString()
+      });
+
+      return json({ ok: true, key, contentType, size: data.byteLength });
+    }
+
+    if (url.pathname.startsWith("/media/")) {
+      const key = decodeURIComponent(url.pathname.slice("/media/".length));
+      const meta = await this.ctx.storage.get(`media:${key}:meta`);
+      if (!meta) return new Response("Not found", { status: 404 });
+
+      if (request.method === "DELETE") {
+        for (let i = 0; i < meta.chunks; i++) {
+          await this.ctx.storage.delete(`media:${key}:${i}`);
+        }
+        await this.ctx.storage.delete(`media:${key}:meta`);
+        return json({ ok: true });
+      }
+
+      if (request.method === "GET") {
+        const out = new Uint8Array(meta.size);
+        let offset = 0;
+        for (let i = 0; i < meta.chunks; i++) {
+          const part = await this.ctx.storage.get(`media:${key}:${i}`);
+          if (!part) return new Response("Corrupt media", { status: 500 });
+          const bytes = new Uint8Array(part);
+          out.set(bytes, offset);
+          offset += bytes.byteLength;
+        }
+        return new Response(out, {
+          headers: {
+            "content-type": meta.contentType,
+            "cache-control": "public, max-age=31536000, immutable"
+          }
+        });
+      }
+    }
+
+    return new Response("Not found", { status: 404 });
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    const imageSource = "https://raw.githubusercontent.com/nasirovramin/nasiroff-content-bot/main.ru/assets/eyes.jpg";
 
-
-    // Persistent article API. CONTENT is a Cloudflare KV binding and MEDIA is an R2 binding.
     if (url.pathname === "/api/article/dord-baxis") {
       const userId = url.searchParams.get("u");
       const sig = url.searchParams.get("sig");
@@ -78,42 +216,61 @@ export default {
       }
 
       if (request.method === "GET") {
-        if (!env.CONTENT) return json({ ok: false, error: "storage_not_ready" }, 503);
-        const saved = await env.CONTENT.get(`article:${ARTICLE_ID}`, "json");
-        return json({ ok: true, article: saved || null });
+        const saved = await cmsGetArticle(env);
+        return json({ ok: true, article: saved });
       }
 
       if (request.method === "POST") {
-        if (!env.CONTENT) return json({ ok: false, error: "storage_not_ready" }, 503);
         const body = await request.json();
         if (!body?.html || typeof body.html !== "string") {
           return json({ ok: false, error: "invalid_article" }, 400);
         }
 
-        const old = await env.CONTENT.get(`article:${ARTICLE_ID}`, "json") || {};
+        const old = await cmsGetArticle(env) || {};
+        const newMediaKeys = extractMediaKeys(body.html);
+        const oldMediaKeys = Array.isArray(old.mediaKeys) ? old.mediaKeys : [];
+        const removed = oldMediaKeys.filter(k => !newMediaKeys.includes(k));
+
         const record = {
           ...old,
           id: ARTICLE_ID,
           slug: ARTICLE_ID,
           html: body.html,
+          mediaKeys: newMediaKeys,
           updatedAt: new Date().toISOString()
         };
-        await env.CONTENT.put(`article:${ARTICLE_ID}`, JSON.stringify(record));
+
+        const saved = await cmsPutArticle(env, record);
+        if (!saved.ok) return json({ ok: false, error: "save_failed" }, 500);
+
+        for (const key of removed) {
+          try { await cmsDeleteMedia(env, key); } catch {}
+        }
 
         const articleUrl = `${url.origin}/article/${ARTICLE_ID}`;
         let telegram = null;
         if (old.mainMessageId) {
           const caption = telegramCaptionFromHtml(body.html, articleUrl);
-          const r = await tg(env.BOT_TOKEN, "editMessageCaption", {
-            chat_id: env.MAIN_CHANNEL,
-            message_id: old.mainMessageId,
-            caption,
-            parse_mode: "HTML"
-          });
+          const method = old.mainMessageType === "text" ? "editMessageText" : "editMessageCaption";
+          const payload = old.mainMessageType === "text"
+            ? {
+                chat_id: env.MAIN_CHANNEL,
+                message_id: old.mainMessageId,
+                text: caption,
+                parse_mode: "HTML",
+                disable_web_page_preview: false
+              }
+            : {
+                chat_id: env.MAIN_CHANNEL,
+                message_id: old.mainMessageId,
+                caption,
+                parse_mode: "HTML"
+              };
+          const r = await tg(env.BOT_TOKEN, method, payload);
           telegram = await r.json();
         }
 
-        return json({ ok: true, article: record, telegram });
+        return json({ ok: true, article: record, telegram, removedMedia: removed.length });
       }
 
       return new Response("Method not allowed", { status: 405 });
@@ -126,34 +283,37 @@ export default {
         return json({ ok: false, error: "unauthorized" }, 401);
       }
       if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
-      if (!env.MEDIA) return json({ ok: false, error: "media_storage_not_ready" }, 503);
 
       const form = await request.formData();
       const file = form.get("file");
       if (!(file instanceof File)) return json({ ok: false, error: "file_required" }, 400);
-      const safeExt = (file.name.split(".").pop() || "bin").toLowerCase().replace(/[^a-z0-9]/g, "") || "bin";
-      const key = `articles/${ARTICLE_ID}/${Date.now()}-${crypto.randomUUID()}.${safeExt}`;
-      await env.MEDIA.put(key, file.stream(), {
-        httpMetadata: { contentType: file.type || "application/octet-stream" }
+      if (file.size > 20 * 1024 * 1024) {
+        return json({ ok: false, error: "file_too_large", maxMb: 20 }, 413);
+      }
+
+      const stub = cmsStub(env);
+      const r = await stub.fetch("https://cms.internal/media", {
+        method: "POST",
+        headers: { "content-type": file.type || "application/octet-stream" },
+        body: file.stream()
       });
-      return json({ ok: true, url: `${url.origin}/r2/${key}`, key, type: file.type });
+      const data = await r.json();
+      if (!r.ok || !data.ok) return json({ ok: false, error: "media_save_failed" }, 500);
+
+      return json({
+        ok: true,
+        key: data.key,
+        type: data.contentType,
+        url: `${url.origin}/media-store/${encodeURIComponent(data.key)}`
+      });
     }
 
-    if (url.pathname.startsWith("/r2/") && request.method === "GET") {
-      if (!env.MEDIA) return new Response("Media storage not ready", { status: 503 });
-      const key = decodeURIComponent(url.pathname.slice(4));
-      const obj = await env.MEDIA.get(key);
-      if (!obj) return new Response("Not found", { status: 404 });
-      const headers = new Headers();
-      obj.writeHttpMetadata(headers);
-      headers.set("etag", obj.httpEtag);
-      headers.set("cache-control", "public, max-age=31536000, immutable");
-      return new Response(obj.body, { headers });
+    if (url.pathname.startsWith("/media-store/") && request.method === "GET") {
+      const key = decodeURIComponent(url.pathname.slice("/media-store/".length));
+      return cmsStub(env).fetch(`https://cms.internal/media/${encodeURIComponent(key)}`);
     }
 
     if (request.method === "GET") {
-      const imageSource = "https://raw.githubusercontent.com/nasirovramin/nasiroff-content-bot/main.ru/assets/eyes.jpg";
-
       if (url.pathname === "/media/eyes.jpg") {
         const img = await fetch(imageSource);
         if (!img.ok) return new Response("Image not found", { status: 404 });
@@ -171,15 +331,17 @@ export default {
         if (!(await validEditSig(env, ARTICLE_ID, userId, sig))) {
           return new Response("Bu editor linki etibarsızdır.", { status: 401 });
         }
+
         const articleUrl = `${url.origin}/article/dord-baxis`;
         const apiUrl = `${url.origin}/api/article/dord-baxis?u=${encodeURIComponent(userId)}&sig=${encodeURIComponent(sig)}`;
         const mediaApiUrl = `${url.origin}/api/media?u=${encodeURIComponent(userId)}&sig=${encodeURIComponent(sig)}`;
+
         const html = `<!doctype html>
 <html lang="az">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Edit · Bir layihəyə dörd fərqli baxış</title>
+<title>Edit · ${ARTICLE_TITLE}</title>
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;background:#f4f4f4;color:#171717;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}
@@ -219,217 +381,221 @@ button.primary{background:#171717;color:#fff;border-color:#171717}
   <input id="imageInput" type="file" accept="image/*" hidden>
   <input id="videoInput" type="file" accept="video/*,image/gif" hidden>
   <a class="btn" href="${articleUrl}" target="_blank">👁 Preview</a>
-  <button class="primary" type="button" onclick="saveDraft()">💾 Save</button>
+  <button class="primary" type="button" onclick="saveDraft()">💾 Save & Update</button>
   <span id="status" class="status">Edit rejimi</span>
 </div>
 <div class="tip">Mətndə istədiyin yerə kursoru qoy, sonra şəkil/video düyməsini bas. Media həmin nöqtəyə əlavə olunacaq.</div>
 <div class="wrap">
-  <article id="editor" contenteditable="true">
-    <h1>Bir layihəyə dörd fərqli baxış</h1>
-    <p class="meta">Ramin Nəsirov · 29 sentyabr 2026</p>
-    <img src="/media/eyes.jpg" alt="Fərqli gözlər">
-    <p class="lead">Edvard de Bononun Six Thinking Hats, yəni Altı düşüncə papağı metodunu çoxumuz bilirik. Mənə isə layihə üzərində işləyərkən başqa bir yanaşma daha maraqlı gəlir. Bəzən yeni ideya tapmaq üçün daha çox düşünmək yox, baxış bucağını dəyişmək lazımdır. Eyni layihəyə dörd fərqli roldan baxdığınızı təsəvvür edin.</p>
-    <h2>Birinci baxış-uşaq</h2>
-    <p>Burada hər şey mümkündür. Bu alınmaz, müştəri qəbul etməz, büdcə çatmaz kimi fikirləri bir müddət kənara qoyursunuz. Forma, məna, material, texnologiya və ideyalarla oynayırsınız. Bir-biri ilə əlaqəsi olmayan şeyləri də birləşdirirsiniz. Bu mərhələdə məqsəd dərhal doğru cavabı tapmaq deyil. Məqsəd mümkün qədər çox variant yaratmaqdır.</p>
-    <h2>İkinci baxış-İsida</h2>
-    <p>İsida qədim Misirdə analıq, qayğı və qoruma ilə bağlı obrazdır. Burada ideyanın yalnız bu gününə yox, gələcəyinə baxırsınız. Bu həll insana nə verir? İstifadəçi üçün rahatdırmı? Bir neçə ildən sonra da mənası qalacaqmı? Dizaynı yalnız görüntü kimi yox, insan, istifadəçi təcrübəsi, biznes və gələcək nəticələrlə birlikdə düşünürsünüz.</p>
-    <h2>Üçüncü baxış-Osiris</h2>
-    <p>İndi ideyalara daha sərt baxmaq vaxtıdır. Faktlara baxırsınız, müqayisə edirsiniz, ölçürsünüz. Hansı fikir həqiqətən işləyir? Hansı sadəcə maraqlı görünür? Hansı hissə artıqdır? Zəif variantları çıxarırsınız. Güclü ideyanı təmizləyib daha aydın sistemə çevirirsiniz. Kreativlik yalnız ideya yaratmaq deyil. Nədən imtina etməyi bilmək də onun bir hissəsidir.</p>
-    <h2>Dördüncü baxış-firon</h2>
-    <p>Bu artıq qərar mərhələsidir. Araşdırmısınız, variant yaratmısınız, müqayisə etmisiniz. İndi seçim etmək lazımdır. Burada təcrübə, zövq və intuisiya işə düşür. Bəzən daha təhlükəsiz yolu, bəzən isə daha riskli və fərqli istiqaməti seçirsiniz. Creative Director üçün əsas məsələ yalnız yaxşı ideyanı görmək deyil. Hansı ideyanın arxasında dayanacağını seçməkdir.</p>
-    <h2>Dörd mərhələ</h2>
-    <p>Uşaq-yarat. İsida-gələcəyi gör. Osiris-seç və təmizlə. Firon-qərar ver. Eyni layihəyə dörd dəfə baxırsınız. Amma hər dəfə başqa gözlə. Bəlkə də qədim misirlilərin heykəllər üçün gözləri ayrıca hazırlaması təsadüfi deyildi. Göz onlar üçün sadəcə görmək vasitəsi yox, xüsusi məna daşıyan bir simvol idi.</p>
-  </article>
+  <article id="editor" contenteditable="true">${defaultArticleHtml()}</article>
 </div>
 <script>
 let savedRange=null;
-const API_URL=`${apiUrl}`;
-const MEDIA_API_URL=`${mediaApiUrl}`;
+const API_URL=${JSON.stringify(apiUrl)};
+const MEDIA_API_URL=${JSON.stringify(mediaApiUrl)};
 const editor=document.getElementById('editor');
+const statusEl=document.getElementById('status');
+
 editor.addEventListener('keyup',remember);
 editor.addEventListener('mouseup',remember);
 editor.addEventListener('touchend',remember);
+
 function remember(){
   const s=window.getSelection();
   if(s&&s.rangeCount) savedRange=s.getRangeAt(0).cloneRange();
 }
+
 function fmt(cmd,val){
   editor.focus();
   document.execCommand(cmd,false,val||null);
   remember();
 }
+
 function insertNode(node){
   editor.focus();
   const s=window.getSelection();
   if(savedRange){
-    s.removeAllRanges(); s.addRange(savedRange);
+    s.removeAllRanges();
+    s.addRange(savedRange);
     savedRange.insertNode(node);
-    savedRange.setStartAfter(node); savedRange.collapse(true);
-    s.removeAllRanges(); s.addRange(savedRange);
-  }else editor.appendChild(node);
+    savedRange.setStartAfter(node);
+    savedRange.collapse(true);
+    s.removeAllRanges();
+    s.addRange(savedRange);
+  }else{
+    editor.appendChild(node);
+  }
 }
+
+function mediaWrap(el){
+  if(el.parentElement && el.parentElement.classList.contains('media-wrap')) return;
+  const wrap=document.createElement('div');
+  wrap.className='media-wrap';
+  el.parentNode.insertBefore(wrap,el);
+  wrap.appendChild(el);
+  const rm=document.createElement('button');
+  rm.type='button';
+  rm.className='remove';
+  rm.textContent='Sil';
+  rm.setAttribute('contenteditable','false');
+  rm.onclick=()=>wrap.remove();
+  wrap.appendChild(rm);
+}
+
+function enhanceMedia(){
+  editor.querySelectorAll('img,video').forEach(mediaWrap);
+}
+
 async function addFile(file,type){
-  const status=document.getElementById('status');
-  status.textContent='Media yüklənir...';
+  statusEl.textContent='Media yüklənir...';
   const fd=new FormData();
   fd.append('file',file,file.name);
   const r=await fetch(MEDIA_API_URL,{method:'POST',body:fd});
   const data=await r.json().catch(()=>({}));
+
   if(!r.ok||!data.ok){
-    status.textContent=data.error==='media_storage_not_ready'
-      ? 'Media storage hələ qoşulmayıb.'
+    statusEl.textContent=data.error==='file_too_large'
+      ? 'Fayl 20 MB-dan böyükdür.'
       : 'Media yüklənmədi.';
     return;
   }
-  const wrap=document.createElement('div');
-  wrap.className='media-wrap';
+
   const el=document.createElement(type==='video'?'video':'img');
   el.src=data.url;
-  el.dataset.r2key=data.key;
+  el.dataset.mediaKey=data.key;
   if(type==='video'){el.controls=true;el.playsInline=true}
+
+  const wrap=document.createElement('div');
+  wrap.className='media-wrap';
+  wrap.appendChild(el);
+
   const rm=document.createElement('button');
-  rm.type='button';rm.className='remove';rm.textContent='Sil';
+  rm.type='button';
+  rm.className='remove';
+  rm.textContent='Sil';
+  rm.setAttribute('contenteditable','false');
   rm.onclick=()=>wrap.remove();
-  wrap.appendChild(el);wrap.appendChild(rm);
+  wrap.appendChild(rm);
+
   insertNode(wrap);
-  status.textContent='Uğurla yükləndi. Save edin.';
+  statusEl.textContent='Uğurla yükləndi. Save & Update edin.';
 }
+
 document.getElementById('imageInput').addEventListener('change',e=>{
   if(e.target.files[0]) addFile(e.target.files[0],'image');
   e.target.value='';
 });
+
 document.getElementById('videoInput').addEventListener('change',e=>{
   const f=e.target.files[0];
   if(f) addFile(f,f.type==='image/gif'?'image':'video');
   e.target.value='';
 });
+
+function cleanEditorHtml(){
+  const clone=editor.cloneNode(true);
+  clone.querySelectorAll('.remove').forEach(x=>x.remove());
+  clone.querySelectorAll('[contenteditable]').forEach(x=>x.removeAttribute('contenteditable'));
+  return clone.innerHTML;
+}
+
 async function saveDraft(){
-  const status=document.getElementById('status');
-  status.textContent='Yadda saxlanılır...';
+  statusEl.textContent='Yadda saxlanılır...';
   const r=await fetch(API_URL,{
     method:'POST',
     headers:{'content-type':'application/json'},
-    body:JSON.stringify({id:'dord-baxis',html:editor.innerHTML})
+    body:JSON.stringify({id:'dord-baxis',html:cleanEditorHtml()})
   });
   const data=await r.json().catch(()=>({}));
+
   if(!r.ok||!data.ok){
-    status.textContent=data.error==='storage_not_ready'
-      ? 'Server yaddaşı hələ qoşulmayıb.'
-      : 'Yadda saxlamaq alınmadı.';
+    statusEl.textContent='Yadda saxlamaq alınmadı.';
     return;
   }
-  status.textContent=data.telegram && data.telegram.ok
-    ? 'Yadda saxlanıldı. Məqalə və Telegram yeniləndi.'
-    : 'Yadda saxlanıldı. Məqalə yeniləndi.';
+
+  if(data.telegram && data.telegram.ok===false){
+    statusEl.textContent='Məqalə yadda saxlanıldı, Telegram yenilənmədi.';
+  }else if(data.telegram && data.telegram.ok){
+    statusEl.textContent='Məqalə və Telegram uğurla yeniləndi.';
+  }else{
+    statusEl.textContent='Məqalə uğurla yadda saxlanıldı.';
+  }
 }
+
 (async()=>{
   const r=await fetch(API_URL);
   if(!r.ok) return;
   const data=await r.json();
   if(data?.article?.html) editor.innerHTML=data.article.html;
-})().catch(()=>{});
+  enhanceMedia();
+})().catch(()=>enhanceMedia());
+enhanceMedia();
 </script>
 </body>
 </html>`;
-        return new Response(html, {headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store"}});
+
+        return new Response(html, {
+          headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }
+        });
       }
 
       if (url.pathname === "/article/dord-baxis") {
-        const savedArticle = env.CONTENT ? await env.CONTENT.get(`article:${ARTICLE_ID}`, "json") : null;
+        const savedArticle = await cmsGetArticle(env);
+        const bodyHtml = savedArticle?.html || defaultArticleHtml();
         const html = `<!doctype html>
 <html lang="az">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Bir layihəyə dörd fərqli baxış</title>
+<title>${ARTICLE_TITLE}</title>
 <meta name="description" content="Kreativ prosesə dörd fərqli baxış: uşaq, İsida, Osiris və firon.">
 <style>
-  *{box-sizing:border-box}
-  html,body{margin:0;padding:0;background:#fff;color:#171717}
-  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;font-weight:400}
-  main{max-width:900px;margin:0 auto;padding:34px 28px 76px}
-  h1{font-size:54px;line-height:1.03;margin:0 0 12px;font-weight:800;letter-spacing:-.035em}
-  .meta{display:flex;align-items:center;gap:14px;font-size:16px;line-height:1.2;color:#747474;margin:0 0 34px}
-  .meta::after{content:"";height:1px;background:#aaa;flex:1;min-width:60px}
-  h2{font-size:24px;line-height:1.22;margin:30px 0 10px;font-weight:600;letter-spacing:-.01em}
-  p{font-size:18px;line-height:1.58;margin:0 0 16px;font-weight:400}
-  img{display:block;width:100%;height:auto;margin:0 0 30px;border-radius:0}
-  .lead{font-size:25px;line-height:1.23;font-weight:700;letter-spacing:-.02em;margin:0 0 28px}
-  .back{display:inline-flex;align-items:center;justify-content:center;margin-top:26px;padding:9px 14px;border:1px solid #a7a7a7;border-radius:999px;color:#171717;text-decoration:none;font-size:14px;font-weight:600}
-  .back:hover{border-color:#171717}
-  @media(max-width:640px){
-    main{padding:22px 18px 52px}
-    h1{font-size:36px;line-height:1.06;margin-bottom:10px}
-    .meta{font-size:13px;gap:10px;margin-bottom:22px}
-    h2{font-size:21px;margin-top:24px}
-    p{font-size:16px;line-height:1.55;margin-bottom:14px}
-    .lead{font-size:19px;line-height:1.28;margin-bottom:22px}
-    img{margin-bottom:22px}
-    .back{font-size:13px;padding:8px 12px}
-  }
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:#fff;color:#171717}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;font-weight:400}
+main{max-width:900px;margin:0 auto;padding:34px 28px 76px}
+h1{font-size:54px;line-height:1.03;margin:0 0 12px;font-weight:800;letter-spacing:-.035em}
+.meta{display:flex;align-items:center;gap:14px;font-size:16px;line-height:1.2;color:#747474;margin:0 0 34px}
+.meta::after{content:"";height:1px;background:#aaa;flex:1;min-width:60px}
+h2{font-size:24px;line-height:1.22;margin:30px 0 10px;font-weight:600;letter-spacing:-.01em}
+p{font-size:18px;line-height:1.58;margin:0 0 16px;font-weight:400}
+img,video{display:block;width:100%;height:auto;margin:22px 0 30px;border-radius:0}
+.lead{font-size:25px;line-height:1.23;font-weight:700;letter-spacing:-.02em;margin:0 0 28px}
+.back{display:inline-flex;align-items:center;justify-content:center;margin-top:26px;padding:9px 14px;border:1px solid #a7a7a7;border-radius:999px;color:#171717;text-decoration:none;font-size:14px;font-weight:600}
+.back:hover{border-color:#171717}
+@media(max-width:640px){
+  main{padding:22px 18px 52px}
+  h1{font-size:36px;line-height:1.06;margin-bottom:10px}
+  .meta{font-size:13px;gap:10px;margin-bottom:22px}
+  h2{font-size:21px;margin-top:24px}
+  p{font-size:16px;line-height:1.55;margin-bottom:14px}
+  .lead{font-size:19px;line-height:1.28;margin-bottom:22px}
+  img,video{margin-bottom:22px}
+  .back{font-size:13px;padding:8px 12px}
+}
 </style>
 </head>
 <body>
 <main>
-  ${savedArticle?.html ? savedArticle.html : `
-  <h1>Bir layihəyə dörd fərqli baxış</h1>
-  <p class="meta">Ramin Nəsirov · 29 sentyabr 2026</p>
-  <img src="/media/eyes.jpg" alt="Fərqli gözlər">
-  <p class="lead">Edvard de Bononun Six Thinking Hats, yəni Altı düşüncə papağı metodunu çoxumuz bilirik. Mənə isə layihə üzərində işləyərkən başqa bir yanaşma daha maraqlı gəlir. Bəzən yeni ideya tapmaq üçün daha çox düşünmək yox, baxış bucağını dəyişmək lazımdır. Eyni layihəyə dörd fərqli roldan baxdığınızı təsəvvür edin.</p>
-
-  <h2>Birinci baxış-uşaq</h2>
-  <p>Burada hər şey mümkündür. Bu alınmaz, müştəri qəbul etməz, büdcə çatmaz kimi fikirləri bir müddət kənara qoyursunuz. Forma, məna, material, texnologiya və ideyalarla oynayırsınız. Bir-biri ilə əlaqəsi olmayan şeyləri də birləşdirirsiniz. Bu mərhələdə məqsəd dərhal doğru cavabı tapmaq deyil. Məqsəd mümkün qədər çox variant yaratmaqdır.</p>
-
-  <h2>İkinci baxış-İsida</h2>
-  <p>İsida qədim Misirdə analıq, qayğı və qoruma ilə bağlı obrazdır. Burada ideyanın yalnız bu gününə yox, gələcəyinə baxırsınız. Bu həll insana nə verir? İstifadəçi üçün rahatdırmı? Bir neçə ildən sonra da mənası qalacaqmı? Dizaynı yalnız görüntü kimi yox, insan, istifadəçi təcrübəsi, biznes və gələcək nəticələrlə birlikdə düşünürsünüz.</p>
-
-  <h2>Üçüncü baxış-Osiris</h2>
-  <p>İndi ideyalara daha sərt baxmaq vaxtıdır. Faktlara baxırsınız, müqayisə edirsiniz, ölçürsünüz. Hansı fikir həqiqətən işləyir? Hansı sadəcə maraqlı görünür? Hansı hissə artıqdır? Zəif variantları çıxarırsınız. Güclü ideyanı təmizləyib daha aydın sistemə çevirirsiniz. Kreativlik yalnız ideya yaratmaq deyil. Nədən imtina etməyi bilmək də onun bir hissəsidir.</p>
-
-  <h2>Dördüncü baxış-firon</h2>
-  <p>Bu artıq qərar mərhələsidir. Araşdırmısınız, variant yaratmısınız, müqayisə etmisiniz. İndi seçim etmək lazımdır. Burada təcrübə, zövq və intuisiya işə düşür. Bəzən daha təhlükəsiz yolu, bəzən isə daha riskli və fərqli istiqaməti seçirsiniz. Creative Director üçün əsas məsələ yalnız yaxşı ideyanı görmək deyil. Hansı ideyanın arxasında dayanacağını seçməkdir.</p>
-
-  <h2>Dörd mərhələ</h2>
-  <p>Uşaq-yarat. İsida-gələcəyi gör. Osiris-seç və təmizlə. Firon-qərar ver. Eyni layihəyə dörd dəfə baxırsınız. Amma hər dəfə başqa gözlə. Bəlkə də qədim misirlilərin heykəllər üçün gözləri ayrıca hazırlaması təsadüfi deyildi. Göz onlar üçün sadəcə görmək vasitəsi yox, xüsusi məna daşıyan bir simvol idi.</p>
-  `}
-  <a class="back" href="https://t.me/nasiroff_az">← Geri qayıt</a>
+${bodyHtml}
+<a class="back" href="https://t.me/nasiroff_az">← Geri qayıt</a>
 </main>
 </body>
 </html>`;
         return new Response(html, {
-          headers: {
-            "content-type": "text/html; charset=utf-8",
-            "cache-control": "public, max-age=300"
-          }
+          headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }
         });
       }
 
       if (url.pathname === "/push-approved-8f31d2") {
         const articleUrl = `${url.origin}/article/dord-baxis`;
-        const imageUrl = `${url.origin}/media/eyes.jpg`;
-        const caption = `<b>Bir layihəyə dörd fərqli baxış 👁</b>
-
-Bəzən yeni ideya tapmaq üçün daha çox düşünmək yox, məsələyə başqa gözlə baxmaq lazımdır.
-
-Uşaq-yarat. İsida-gələcəyi gör. Osiris-seç və təmizlə. Firon-qərar ver.
-
-<a href="${articleUrl}">Ətraflı oxu</a>`;
-
+        const caption = telegramCaptionFromHtml(defaultArticleHtml(), articleUrl);
         const imageRes = await fetch(imageSource);
-        if (!imageRes.ok) {
-          return new Response(JSON.stringify({
-            ok: false,
-            description: "Image fetch failed: " + imageRes.status
-          }, null, 2), {
-            status: 500,
-            headers: { "content-type": "application/json; charset=utf-8" }
-          });
-        }
 
-        const imageBlob = await imageRes.blob();
+        if (!imageRes.ok) return json({ ok: false, error: "image_fetch_failed" }, 500);
+
         const form = new FormData();
         form.append("chat_id", env.TEST_CHANNEL);
-        form.append("photo", imageBlob, "eyes.jpg");
+        form.append("photo", await imageRes.blob(), "eyes.jpg");
         form.append("caption", caption);
         form.append("parse_mode", "HTML");
         form.append("reply_markup", JSON.stringify({
@@ -443,23 +609,12 @@ Uşaq-yarat. İsida-gələcəyi gör. Osiris-seç və təmizlə. Firon-qərar ve
           method: "POST",
           body: form
         });
-        const postData = await postRes.json();
-
-        return new Response(JSON.stringify({
-          article: articleUrl,
-          telegram: postData
-        }, null, 2), {
-          headers: { "content-type": "application/json; charset=utf-8" }
-        });
+        return json({ article: articleUrl, telegram: await postRes.json() });
       }
 
       if (url.pathname === "/setup-webhook") {
-        const webhookUrl = `${url.origin}/`;
-        const r = await tg(env.BOT_TOKEN, "setWebhook", { url: webhookUrl });
-        const data = await r.json();
-        return new Response(JSON.stringify(data, null, 2), {
-          headers: { "content-type": "application/json; charset=utf-8" },
-        });
+        const r = await tg(env.BOT_TOKEN, "setWebhook", { url: `${url.origin}/` });
+        return json(await r.json());
       }
 
       return new Response("nasiroff_content_bot is running");
@@ -474,7 +629,6 @@ Uşaq-yarat. İsida-gələcəyi gör. Osiris-seç və təmizlə. Firon-qərar ve
     if (update.message?.chat?.type === "private" && update.message?.photo?.length) {
       const photo = update.message.photo[update.message.photo.length - 1];
       const caption = update.message.caption || "";
-
       const testPost = await tg(env.BOT_TOKEN, "sendPhoto", {
         chat_id: env.TEST_CHANNEL,
         photo: photo.file_id,
@@ -487,16 +641,13 @@ Uşaq-yarat. İsida-gələcəyi gör. Osiris-seç və təmizlə. Firon-qərar ve
           ]]
         }
       });
-
       const data = await testPost.json();
-
       await tg(env.BOT_TOKEN, "sendMessage", {
         chat_id: update.message.chat.id,
         text: data.ok
           ? "Şəkil qəbul edildi və test kanalına göndərildi ✅"
           : "Şəkli test kanalına göndərmək alınmadı ❌"
       });
-
       return new Response("ok");
     }
 
@@ -506,7 +657,21 @@ Uşaq-yarat. İsida-gələcəyi gör. Osiris-seç və təmizlə. Firon-qərar ve
       if (text === "/start") {
         await tg(env.BOT_TOKEN, "sendMessage", {
           chat_id: update.message.chat.id,
-          text: "Hazır mətni mənə göndər. Mən onu əvvəl test kanalına göndərəcəyəm.",
+          text: "Hazır mətni və ya şəkli mənə göndər. Əvvəl test kanalına göndərəcəyəm. Məqaləni redaktə etmək üçün /edit yaz."
+        });
+        return new Response("ok");
+      }
+
+      if (text === "/edit") {
+        const userId = update.message.from.id;
+        const sig = await makeEditSig(env, ARTICLE_ID, userId);
+        const editUrl = `${url.origin}/edit/dord-baxis?u=${encodeURIComponent(userId)}&sig=${sig}`;
+        await tg(env.BOT_TOKEN, "sendMessage", {
+          chat_id: update.message.chat.id,
+          text: "Məqaləni açıb birbaşa səhifənin üzərində redaktə edə bilərsiniz.",
+          reply_markup: {
+            inline_keyboard: [[{ text: "✏️ Edit", url: editUrl }]]
+          }
         });
         return new Response("ok");
       }
@@ -525,14 +690,10 @@ Uşaq-yarat. İsida-gələcəyi gör. Osiris-seç və təmizlə. Firon-qərar ve
       });
 
       const data = await testPost.json();
-
       await tg(env.BOT_TOKEN, "sendMessage", {
         chat_id: update.message.chat.id,
-        text: data.ok
-          ? "Test kanalına göndərildi."
-          : "Test kanalına göndərmək alınmadı. Kanal username/ID və admin icazələrini yoxla.",
+        text: data.ok ? "Test kanalına göndərildi." : "Test kanalına göndərmək alınmadı."
       });
-
       return new Response("ok");
     }
 
@@ -550,32 +711,30 @@ Uşaq-yarat. İsida-gələcəyi gör. Osiris-seç və təmizlə. Firon-qərar ve
 
         await tg(env.BOT_TOKEN, "answerCallbackQuery", {
           callback_query_id: q.id,
-          text: copiedData.ok ? "Əsas kanalda paylaşıldı ✅" : "Paylaşmaq alınmadı ❌",
+          text: copiedData.ok ? "Əsas kanalda paylaşıldı ✅" : "Paylaşmaq alınmadı ❌"
         });
 
         if (copiedData.ok) {
           await tg(env.BOT_TOKEN, "editMessageReplyMarkup", {
             chat_id: msg.chat.id,
             message_id: msg.message_id,
-            reply_markup: { inline_keyboard: [] },
+            reply_markup: { inline_keyboard: [] }
           });
 
           const publishedMessageId = copiedData.result.message_id;
-          const articleUrl = `${new URL(request.url).origin}/article/dord-baxis`;
+          const existing = await cmsGetArticle(env) || {};
+          await cmsPutArticle(env, {
+            ...existing,
+            id: ARTICLE_ID,
+            slug: ARTICLE_ID,
+            html: existing.html || defaultArticleHtml(),
+            mediaKeys: existing.mediaKeys || [],
+            mainMessageId: publishedMessageId,
+            mainMessageType: msg.photo?.length ? "media" : "text",
+            publishedAt: existing.publishedAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          });
 
-          if (env.CONTENT) {
-            const existing = await env.CONTENT.get(`article:${ARTICLE_ID}`, "json") || {};
-            await env.CONTENT.put(`article:${ARTICLE_ID}`, JSON.stringify({
-              ...existing,
-              id: ARTICLE_ID,
-              slug: ARTICLE_ID,
-              mainMessageId: publishedMessageId,
-              publishedAt: existing.publishedAt || new Date().toISOString(),
-              updatedAt: new Date().toISOString()
-            }));
-          }
-
-          // Send a private management copy back to the user who approved the post.
           await tg(env.BOT_TOKEN, "copyMessage", {
             chat_id: q.from.id,
             from_chat_id: env.MAIN_CHANNEL,
@@ -583,83 +742,34 @@ Uşaq-yarat. İsida-gələcəyi gör. Osiris-seç və təmizlə. Firon-qərar ve
           });
 
           const editSig = await makeEditSig(env, ARTICLE_ID, q.from.id);
-          const editUrl = `${new URL(request.url).origin}/edit/dord-baxis?u=${encodeURIComponent(q.from.id)}&sig=${editSig}`;
+          const editUrl = `${url.origin}/edit/dord-baxis?u=${encodeURIComponent(q.from.id)}&sig=${editSig}`;
 
           await tg(env.BOT_TOKEN, "sendMessage", {
             chat_id: q.from.id,
-            text: `✅ Post paylaşıldı.\n\nBu onun idarəetmə nüsxəsidir. Sonradan bu paneldən məqaləyə yenidən qayıda bilərsiniz.\nPost ID: ${publishedMessageId}`,
+            text: `✅ Post paylaşıldı.\nPost ID: ${publishedMessageId}`,
             reply_markup: {
-              inline_keyboard: [[
-                { text: "✏️ Edit", url: editUrl }
-              ]]
+              inline_keyboard: [[{ text: "✏️ Edit", url: editUrl }]]
             }
           });
         }
-      }
 
-      if (q.data?.startsWith("admin_edit:")) {
-        const id = q.data.split(":")[1];
-        await tg(env.BOT_TOKEN, "answerCallbackQuery", {
-          callback_query_id: q.id,
-          text: "Edit rejimi açıldı."
-        });
-        await tg(env.BOT_TOKEN, "sendMessage", {
-          chat_id: q.from.id,
-          text: `✏️ Edit rejimi · Post ID: ${id}\n\nDəyişmək istədiyiniz mətni bu mesaja reply olaraq göndərin.`
-        });
-        return new Response("ok");
-      }
-
-      if (q.data?.startsWith("admin_cover:")) {
-        const id = q.data.split(":")[1];
-        await tg(env.BOT_TOKEN, "answerCallbackQuery", {
-          callback_query_id: q.id,
-          text: "Cover dəyişmə rejimi açıldı."
-        });
-        await tg(env.BOT_TOKEN, "sendMessage", {
-          chat_id: q.from.id,
-          text: `🖼 Cover rejimi · Post ID: ${id}\n\nYeni başlıq şəklini/video/GIF-i bu mesaja reply olaraq göndərin.\nTövsiyə olunan ölçü: 1200 × 628 px.`
-        });
-        return new Response("ok");
-      }
-
-      if (q.data?.startsWith("admin_media:")) {
-        const id = q.data.split(":")[1];
-        await tg(env.BOT_TOKEN, "answerCallbackQuery", {
-          callback_query_id: q.id,
-          text: "Mətndaxili media rejimi açıldı."
-        });
-        await tg(env.BOT_TOKEN, "sendMessage", {
-          chat_id: q.from.id,
-          text: `🧩 Mətndaxili media · Post ID: ${id}\n\nŞəkil/video/GIF-ləri bu mesaja reply olaraq göndərin. Bir neçə media göndərə bilərsiniz.\nTövsiyə olunan ölçü: 1200 × 628 px.`
-        });
-        return new Response("ok");
-      }
-
-      if (q.data?.startsWith("admin_update:")) {
-        await tg(env.BOT_TOKEN, "answerCallbackQuery", {
-          callback_query_id: q.id,
-          text: "Preview yenilənməsi növbəti mərhələdə bu panelə bağlanacaq."
-        });
         return new Response("ok");
       }
 
       if (q.data === "reject") {
         await tg(env.BOT_TOKEN, "answerCallbackQuery", {
           callback_query_id: q.id,
-          text: "Paylaşım ləğv edildi.",
+          text: "Paylaşım ləğv edildi."
         });
-
         await tg(env.BOT_TOKEN, "editMessageReplyMarkup", {
           chat_id: msg.chat.id,
           message_id: msg.message_id,
-          reply_markup: { inline_keyboard: [] },
+          reply_markup: { inline_keyboard: [] }
         });
+        return new Response("ok");
       }
-
-      return new Response("ok");
     }
 
     return new Response("ok");
-  },
+  }
 };
