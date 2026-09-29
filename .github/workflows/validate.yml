@@ -25,7 +25,7 @@ jobs:
           node <<'NODE'
           const fs=require('fs');
           const src=fs.readFileSync('src/index.js','utf8');
-          const route=src.indexOf('if (url.pathname === "/edit/dord-baxis")');
+          const route=src.indexOf('const editMatch = url.pathname.match(/^\\/edit\\/([^/]+)$/);');
           const marker='const html = `';
           const tplStart=src.indexOf(marker, route);
           const tplBodyStart=tplStart+marker.length;
