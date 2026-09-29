@@ -1,0 +1,27 @@
+name: Live Worker Smoke Test
+
+on:
+  push:
+    branches:
+      - main.ru
+    paths:
+      - ".github/workflows/live-smoke.yml"
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check root
+        run: |
+          set -euxo pipefail
+          curl -i --fail --show-error --silent "https://nasiroff-content-bot.nasirovramin.workers.dev/" | tee /tmp/root.txt
+          grep -q "nasiroff_content_bot is running" /tmp/root.txt
+      - name: Check article
+        run: |
+          set -euxo pipefail
+          curl -i --fail --show-error --silent "https://nasiroff-content-bot.nasirovramin.workers.dev/article/dord-baxis" | tee /tmp/article.txt
+          grep -q "Bir layihəyə dörd fərqli baxış" /tmp/article.txt
+      - name: Check new CMS build marker
+        run: |
+          set -euxo pipefail
+          curl --fail --show-error --silent "https://nasiroff-content-bot.nasirovramin.workers.dev/article/dord-baxis" | grep -q "video"
