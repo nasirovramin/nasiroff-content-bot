@@ -7,7 +7,7 @@ const tg = (token, method, body) =>
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "one-time-telegram-publish";
+const BUILD_VERSION = "save-refreshes-test-draft";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -1287,6 +1287,57 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
         }
 
         const articleUrl = `${url.origin}/article/${encodeURIComponent(currentArticleId)}`;
+
+        let testTelegram = null;
+        if (old.testMessageId) {
+          const caption = telegramCaptionFromHtml(body.html, articleUrl);
+          const cover = body.html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] || "";
+          const editSig = await makeEditSig(env, currentArticleId, userId);
+          const editUrl = `${url.origin}/edit/${encodeURIComponent(currentArticleId)}?u=${encodeURIComponent(userId)}&sig=${editSig}`;
+          const replyMarkup = {
+            inline_keyboard: [
+              [{ text: "✏️ Edit", url: editUrl }],
+              [
+                { text: "✅ Paylaş", callback_data: `publish:${currentArticleId}` },
+                { text: "🗑 Delete", callback_data: `delete:${currentArticleId}` }
+              ]
+            ]
+          };
+
+          try {
+            await tg(env.BOT_TOKEN, "deleteMessage", {
+              chat_id: env.TEST_CHANNEL,
+              message_id: old.testMessageId
+            });
+          } catch {}
+
+          let testRes;
+          if (cover) {
+            testRes = await tg(env.BOT_TOKEN, "sendPhoto", {
+              chat_id: env.TEST_CHANNEL,
+              photo: new URL(cover, url.origin).href,
+              caption,
+              parse_mode: "HTML",
+              reply_markup: replyMarkup
+            });
+          } else {
+            testRes = await tg(env.BOT_TOKEN, "sendMessage", {
+              chat_id: env.TEST_CHANNEL,
+              text: caption,
+              parse_mode: "HTML",
+              disable_web_page_preview: false,
+              reply_markup: replyMarkup
+            });
+          }
+
+          testTelegram = await testRes.json();
+          if (testTelegram.ok) {
+            record.testMessageId = testTelegram.result.message_id;
+            record.testMessageType = cover ? "media" : "text";
+            await cmsPutArticle(env, record, currentArticleId);
+          }
+        }
+
         let telegram = null;
         if (old.mainMessageId) {
           const caption = telegramCaptionFromHtml(body.html, articleUrl);
@@ -1328,6 +1379,7 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
         return json({
           ok: true,
           article: record,
+          testTelegram,
           telegram,
           linkedin,
           removedMedia: removed.length
