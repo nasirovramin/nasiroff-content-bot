@@ -10,93 +10,107 @@ export default {
     const url = new URL(request.url);
 
     if (request.method === "GET") {
+      const imageSource = "https://raw.githubusercontent.com/nasirovramin/nasiroff-content-bot/e02bff651f45882c31b4d9e3f4123165abad4679/assets/eyes.jpg";
+
+      if (url.pathname === "/media/eyes.jpg") {
+        const img = await fetch(imageSource);
+        if (!img.ok) return new Response("Image not found", { status: 404 });
+        return new Response(img.body, {
+          headers: {
+            "content-type": "image/jpeg",
+            "cache-control": "public, max-age=86400"
+          }
+        });
+      }
+
+      if (url.pathname === "/article/dord-baxis") {
+        const html = `<!doctype html>
+<html lang="az">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bir layihəyə dörd fərqli baxış</title>
+<meta name="description" content="Kreativ prosesə dörd fərqli baxış: uşaq, İsida, Osiris və firon.">
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:#fff;color:#171717}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;line-height:1.68}
+  main{max-width:760px;margin:0 auto;padding:42px 22px 72px}
+  h1{font-size:42px;line-height:1.12;margin:0 0 28px;font-weight:750;letter-spacing:-.02em}
+  h2{font-size:25px;line-height:1.25;margin:38px 0 12px;font-weight:700}
+  p{font-size:19px;margin:0 0 20px}
+  img{display:block;width:100%;height:auto;margin:0 0 34px;border-radius:0}
+  .lead{font-size:21px}
+  @media(max-width:640px){
+    main{padding:26px 18px 56px}
+    h1{font-size:34px}
+    h2{font-size:23px}
+    p,.lead{font-size:18px}
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Bir layihəyə dörd fərqli baxış</h1>
+  <img src="/media/eyes.jpg" alt="Fərqli gözlər">
+  <p class="lead">Edvard de Bononun Six Thinking Hats, yəni Altı düşüncə papağı metodunu çoxumuz bilirik. Mənə isə layihə üzərində işləyərkən başqa bir yanaşma daha maraqlı gəlir.</p>
+  <p>Bəzən yeni ideya tapmaq üçün daha çox düşünmək yox, baxış bucağını dəyişmək lazımdır. Eyni layihəyə dörd fərqli roldan baxdığınızı təsəvvür edin.</p>
+
+  <h2>Birinci baxış-uşaq</h2>
+  <p>Burada hər şey mümkündür. Bu alınmaz, müştəri qəbul etməz, büdcə çatmaz kimi fikirləri bir müddət kənara qoyursunuz.</p>
+  <p>Forma, məna, material, texnologiya və ideyalarla oynayırsınız. Bir-biri ilə əlaqəsi olmayan şeyləri də birləşdirirsiniz.</p>
+  <p>Bu mərhələdə məqsəd dərhal doğru cavabı tapmaq deyil. Məqsəd mümkün qədər çox variant yaratmaqdır.</p>
+
+  <h2>İkinci baxış-İsida</h2>
+  <p>İsida qədim Misirdə analıq, qayğı və qoruma ilə bağlı obrazdır. Burada ideyanın yalnız bu gününə yox, gələcəyinə baxırsınız.</p>
+  <p>Bu həll insana nə verir? İstifadəçi üçün rahatdırmı? Bir neçə ildən sonra da mənası qalacaqmı?</p>
+  <p>Dizaynı yalnız görüntü kimi yox, insan, istifadəçi təcrübəsi, biznes və gələcək nəticələrlə birlikdə düşünürsünüz.</p>
+
+  <h2>Üçüncü baxış-Osiris</h2>
+  <p>İndi ideyalara daha sərt baxmaq vaxtıdır. Faktlara baxırsınız, müqayisə edirsiniz, ölçürsünüz.</p>
+  <p>Hansı fikir həqiqətən işləyir? Hansı sadəcə maraqlı görünür? Hansı hissə artıqdır?</p>
+  <p>Zəif variantları çıxarırsınız. Güclü ideyanı təmizləyib daha aydın sistemə çevirirsiniz.</p>
+  <p>Kreativlik yalnız ideya yaratmaq deyil. Nədən imtina etməyi bilmək də onun bir hissəsidir.</p>
+
+  <h2>Dördüncü baxış-firon</h2>
+  <p>Bu artıq qərar mərhələsidir. Araşdırmısınız, variant yaratmısınız, müqayisə etmisiniz. İndi seçim etmək lazımdır.</p>
+  <p>Burada təcrübə, zövq və intuisiya işə düşür. Bəzən daha təhlükəsiz yolu, bəzən isə daha riskli və fərqli istiqaməti seçirsiniz.</p>
+  <p>Creative Director üçün əsas məsələ yalnız yaxşı ideyanı görmək deyil. Hansı ideyanın arxasında dayanacağını seçməkdir.</p>
+
+  <h2>Dörd mərhələ</h2>
+  <p>Uşaq-yarat. İsida-gələcəyi gör. Osiris-seç və təmizlə. Firon-qərar ver.</p>
+  <p>Eyni layihəyə dörd dəfə baxırsınız. Amma hər dəfə başqa gözlə.</p>
+  <p>Bəlkə də qədim misirlilərin heykəllər üçün gözləri ayrıca hazırlaması təsadüfi deyildi. Göz onlar üçün sadəcə görmək vasitəsi yox, xüsusi məna daşıyan bir simvol idi.</p>
+</main>
+</body>
+</html>`;
+        return new Response(html, {
+          headers: {
+            "content-type": "text/html; charset=utf-8",
+            "cache-control": "public, max-age=300"
+          }
+        });
+      }
 
       if (url.pathname === "/push-approved-8f31d2") {
-        const title = "Bir layihəyə dörd fərqli baxış";
-        const imageUrl = "https://raw.githubusercontent.com/nasirovramin/nasiroff-content-bot/8b4f2dcff36c50c507f62ac61de2dc2ea6bb791c/assets/eyes.jpg";
-
-        const accountBody = new URLSearchParams({
-          short_name: "nasiroff"
-        });
-        const accountRes = await fetch("https://api.telegra.ph/createAccount", {
-          method: "POST",
-          headers: { "content-type": "application/x-www-form-urlencoded" },
-          body: accountBody
-        });
-        const accountData = await accountRes.json();
-
-        if (!accountData.ok) {
-          return new Response(JSON.stringify(accountData, null, 2), {
-            status: 500,
-            headers: { "content-type": "application/json; charset=utf-8" },
-          });
-        }
-
-        const p = (text) => ({ tag: "p", children: [text] });
-        const h = (text) => ({ tag: "h4", children: [text] });
-        const content = [
-          { tag: "img", attrs: { src: imageUrl } },
-          p("Edvard de Bononun Six Thinking Hats, yəni Altı düşüncə papağı metodunu çoxumuz bilirik. Mənə isə layihə üzərində işləyərkən başqa bir yanaşma daha maraqlı gəlir."),
-          p("Bəzən yeni ideya tapmaq üçün daha çox düşünmək yox, baxış bucağını dəyişmək lazımdır. Eyni layihəyə dörd fərqli roldan baxdığınızı təsəvvür edin."),
-          h("Birinci baxış-uşaq"),
-          p("Burada hər şey mümkündür. Bu alınmaz, müştəri qəbul etməz, büdcə çatmaz kimi fikirləri bir müddət kənara qoyursunuz."),
-          p("Forma, məna, material, texnologiya və ideyalarla oynayırsınız. Bir-biri ilə əlaqəsi olmayan şeyləri də birləşdirirsiniz."),
-          p("Bu mərhələdə məqsəd dərhal doğru cavabı tapmaq deyil. Məqsəd mümkün qədər çox variant yaratmaqdır."),
-          h("İkinci baxış-İsida"),
-          p("İsida qədim Misirdə analıq, qayğı və qoruma ilə bağlı obrazdır. Burada ideyanın yalnız bu gününə yox, gələcəyinə baxırsınız."),
-          p("Bu həll insana nə verir? İstifadəçi üçün rahatdırmı? Bir neçə ildən sonra da mənası qalacaqmı?"),
-          p("Dizaynı yalnız görüntü kimi yox, insan, istifadəçi təcrübəsi, biznes və gələcək nəticələrlə birlikdə düşünürsünüz."),
-          h("Üçüncü baxış-Osiris"),
-          p("İndi ideyalara daha sərt baxmaq vaxtıdır. Faktlara baxırsınız, müqayisə edirsiniz, ölçürsünüz."),
-          p("Hansı fikir həqiqətən işləyir? Hansı sadəcə maraqlı görünür? Hansı hissə artıqdır?"),
-          p("Zəif variantları çıxarırsınız. Güclü ideyanı təmizləyib daha aydın sistemə çevirirsiniz."),
-          p("Kreativlik yalnız ideya yaratmaq deyil. Nədən imtina etməyi bilmək də onun bir hissəsidir."),
-          h("Dördüncü baxış-firon"),
-          p("Bu artıq qərar mərhələsidir. Araşdırmısınız, variant yaratmısınız, müqayisə etmisiniz. İndi seçim etmək lazımdır."),
-          p("Burada təcrübə, zövq və intuisiya işə düşür. Bəzən daha təhlükəsiz yolu, bəzən isə daha riskli və fərqli istiqaməti seçirsiniz."),
-          p("Creative Director üçün əsas məsələ yalnız yaxşı ideyanı görmək deyil. Hansı ideyanın arxasında dayanacağını seçməkdir."),
-          h("Dörd mərhələ"),
-          p("Uşaq-yarat. İsida-gələcəyi gör. Osiris-seç və təmizlə. Firon-qərar ver."),
-          p("Eyni layihəyə dörd dəfə baxırsınız. Amma hər dəfə başqa gözlə."),
-          p("Bəlkə də qədim misirlilərin heykəllər üçün gözləri ayrıca hazırlaması təsadüfi deyildi. Göz onlar üçün sadəcə görmək vasitəsi yox, xüsusi məna daşıyan bir simvol idi.")
-        ];
-
-        const pageBody = new URLSearchParams({
-          access_token: accountData.result.access_token,
-          title,
-          content: JSON.stringify(content),
-          return_content: "false"
-        });
-        const pageRes = await fetch("https://api.telegra.ph/createPage", {
-          method: "POST",
-          headers: { "content-type": "application/x-www-form-urlencoded" },
-          body: pageBody
-        });
-        const pageData = await pageRes.json();
-
-        if (!pageData.ok) {
-          return new Response(JSON.stringify(pageData, null, 2), {
-            status: 500,
-            headers: { "content-type": "application/json; charset=utf-8" },
-          });
-        }
-
+        const articleUrl = `${url.origin}/article/dord-baxis`;
+        const imageUrl = `${url.origin}/media/eyes.jpg`;
         const caption = `<b>Bir layihəyə dörd fərqli baxış 👁</b>
 
 Bəzən yeni ideya tapmaq üçün daha çox düşünmək yox, məsələyə başqa gözlə baxmaq lazımdır.
 
 Uşaq-yarat. İsida-gələcəyi gör. Osiris-seç və təmizlə. Firon-qərar ver.
 
-<a href="${pageData.result.url}">Ətraflı oxu</a>`;
+<a href="${articleUrl}">Ətraflı oxu</a>`;
 
         const imageRes = await fetch(imageUrl);
         if (!imageRes.ok) {
           return new Response(JSON.stringify({
-            telegraph: pageData,
-            telegram: { ok: false, description: "Worker could not fetch image: " + imageRes.status }
+            ok: false,
+            description: "Image fetch failed: " + imageRes.status
           }, null, 2), {
             status: 500,
-            headers: { "content-type": "application/json; charset=utf-8" },
+            headers: { "content-type": "application/json; charset=utf-8" }
           });
         }
 
@@ -120,10 +134,10 @@ Uşaq-yarat. İsida-gələcəyi gör. Osiris-seç və təmizlə. Firon-qərar ve
         const postData = await postRes.json();
 
         return new Response(JSON.stringify({
-          telegraph: pageData,
+          article: articleUrl,
           telegram: postData
         }, null, 2), {
-          headers: { "content-type": "application/json; charset=utf-8" },
+          headers: { "content-type": "application/json; charset=utf-8" }
         });
       }
 
