@@ -7,7 +7,7 @@ const tg = (token, method, body) =>
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "source-date-on-drafts";
+const BUILD_VERSION = "gemini-health-check";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -1117,6 +1117,42 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
       return new Response(BUILD_VERSION, {
         headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" }
       });
+    }
+
+    if (url.pathname === "/health/gemini") {
+      if (!env.GEMINI_API_KEY) {
+        return json({ ok: false, configured: false, error: "missing_key" }, 503);
+      }
+      try {
+        const model = env.GEMINI_MODEL || "gemini-3.5-flash";
+        const r = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+          {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-goog-api-key": env.GEMINI_API_KEY
+            },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: "Cavab olaraq yalnız OK yaz." }] }],
+              generationConfig: { temperature: 0 }
+            })
+          }
+        );
+        const data = await r.json().catch(()=>({}));
+        return json({
+          ok: r.ok,
+          configured: true,
+          model,
+          status: r.status,
+          response: r.ok
+            ? (data?.candidates?.[0]?.content?.parts || []).map(p=>p?.text||"").join("").trim().slice(0,20)
+            : null,
+          error: r.ok ? null : (data?.error?.message || "gemini_error")
+        }, r.ok ? 200 : 502);
+      } catch (e) {
+        return json({ ok: false, configured: true, error: String(e?.message || e).slice(0,180) }, 502);
+      }
     }
 
 
