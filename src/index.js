@@ -377,7 +377,7 @@ button.primary{background:#171717;color:#fff;border-color:#171717}
   <button type="button" onclick="fmt('formatBlock','h2')">H2</button>
   <button type="button" onclick="fmt('formatBlock','p')">Text</button>
   <button class="icon-btn has-tip" type="button" title="Şəkil əlavə et · Tövsiyə olunan ölçü: 1200 × 628 px" data-tip="Şəkil əlavə et · 1200 × 628 px" onclick="document.getElementById('imageInput').click()"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="16.5" cy="9" r="1.5"></circle><path d="M4 17l5-5 4 4 3-3 4 4"></path></svg><span>Şəkil</span></button>
-  <button class="icon-btn" type="button" title="Video/GIF əlavə et" onclick="document.getElementById('videoInput').click()"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="2"></rect><path d="M3 10h18"></path><path d="M7 6l3 4"></path><path d="M12 6l3 4"></path><path d="M10 13.2l5 3-5 3z" fill="currentColor" stroke="none"></path></svg><span>Video/GIF</span></button>
+  <button class="icon-btn has-tip" type="button" title="Video/GIF əlavə et · Tövsiyə olunan ölçü: 1200 × 628 px" data-tip="Video/GIF əlavə et · 1200 × 628 px" onclick="document.getElementById('videoInput').click()"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="2"></rect><path d="M3 10h18"></path><path d="M7 6l3 4"></path><path d="M12 6l3 4"></path><path d="M10 13.2l5 3-5 3z" fill="currentColor" stroke="none"></path></svg><span>Video/GIF</span></button>
   <input id="imageInput" type="file" accept="image/*" hidden>
   <input id="videoInput" type="file" accept="video/*,image/gif" hidden>
   <a class="btn" href="${articleUrl}" target="_blank">Preview</a>
