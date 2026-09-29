@@ -346,7 +346,7 @@ export default {
 *{box-sizing:border-box}
 html,body{margin:0;background:#f4f4f4;color:#171717;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}
 .toolbar{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.96);backdrop-filter:blur(10px);border-bottom:1px solid #ddd;padding:10px 14px;display:flex;gap:8px;flex-wrap:wrap}
-button,.btn{border:1px solid #cfcfcf;background:#fff;color:#171717;border-radius:9px;padding:9px 12px;font-size:14px;font-weight:650;cursor:pointer;text-decoration:none}
+button,.btn{border:1px solid #cfcfcf;background:#fff;color:#171717;border-radius:9px;padding:9px 12px;font-size:14px;font-weight:650;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:7px}.icon-btn svg{width:22px;height:22px;display:block;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 button.primary{background:#171717;color:#fff;border-color:#171717}
 .wrap{max-width:960px;margin:22px auto 60px;background:#fff;padding:34px 30px 70px;box-shadow:0 4px 26px rgba(0,0,0,.06)}
 #editor{outline:none}
@@ -356,7 +356,7 @@ button.primary{background:#171717;color:#fff;border-color:#171717}
 #editor h2{font-size:24px;line-height:1.22;margin:30px 0 10px;font-weight:600}
 #editor p{font-size:18px;line-height:1.58;margin:0 0 16px}
 #editor .lead{font-size:25px;line-height:1.23;font-weight:700;margin:0 0 28px}
-#editor img,#editor video{display:block;width:100%;height:auto;margin:22px 0 28px}
+#editor img,#editor video{display:block;width:100%;height:auto;margin:22px 0 28px}.youtube-embed{position:relative;width:100%;aspect-ratio:16/9;margin:22px 0 28px}.youtube-embed iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
 .media-wrap{position:relative}
 .media-wrap .remove{position:absolute;right:8px;top:8px;background:#fff;border:1px solid #ddd;border-radius:999px;padding:6px 9px;font-size:12px}
 .tip{max-width:960px;margin:18px auto 0;color:#666;font-size:13px;padding:0 4px}
@@ -376,8 +376,8 @@ button.primary{background:#171717;color:#fff;border-color:#171717}
   <button type="button" onclick="fmt('bold')">Bold</button>
   <button type="button" onclick="fmt('formatBlock','h2')">H2</button>
   <button type="button" onclick="fmt('formatBlock','p')">Text</button>
-  <button type="button" onclick="document.getElementById('imageInput').click()">🖼 Şəkil</button>
-  <button type="button" onclick="document.getElementById('videoInput').click()">🎬 Video/GIF</button>
+  <button class="icon-btn" type="button" title="Şəkil əlavə et" onclick="document.getElementById('imageInput').click()"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="16.5" cy="9" r="1.5"></circle><path d="M4 17l5-5 4 4 3-3 4 4"></path></svg><span>Şəkil</span></button>
+  <button class="icon-btn" type="button" title="Video/GIF əlavə et" onclick="document.getElementById('videoInput').click()"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="2"></rect><path d="M3 10h18"></path><path d="M7 6l3 4"></path><path d="M12 6l3 4"></path><path d="M10 13.2l5 3-5 3z" fill="currentColor" stroke="none"></path></svg><span>Video/GIF</span></button>
   <input id="imageInput" type="file" accept="image/*" hidden>
   <input id="videoInput" type="file" accept="video/*,image/gif" hidden>
   <a class="btn" href="${articleUrl}" target="_blank">Preview</a>
@@ -424,6 +424,36 @@ function insertNode(node){
   }else{
     editor.appendChild(node);
   }
+}
+
+function youtubeIdFromUrl(value){
+  try{
+    const u=new URL(value.trim());
+    if(u.hostname==='youtu.be') return u.pathname.split('/').filter(Boolean)[0]||null;
+    if(u.hostname.endsWith('youtube.com')){
+      if(u.pathname==='/watch') return u.searchParams.get('v');
+      const parts=u.pathname.split('/').filter(Boolean);
+      if(parts[0]==='shorts' || parts[0]==='embed' || parts[0]==='live') return parts[1]||null;
+    }
+  }catch(e){}
+  return null;
+}
+
+function insertYoutube(urlValue){
+  const id=youtubeIdFromUrl(urlValue);
+  if(!id) return false;
+  const wrap=document.createElement('div');
+  wrap.className='youtube-embed';
+  wrap.setAttribute('contenteditable','false');
+  const iframe=document.createElement('iframe');
+  iframe.src='https://www.youtube.com/embed/'+encodeURIComponent(id);
+  iframe.title='YouTube video player';
+  iframe.allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';
+  iframe.allowFullscreen=true;
+  wrap.appendChild(iframe);
+  insertNode(wrap);
+  statusEl.textContent='YouTube player əlavə edildi. Save edin.';
+  return true;
 }
 
 function mediaWrap(el){
@@ -489,6 +519,15 @@ document.getElementById('videoInput').addEventListener('change',e=>{
   const f=e.target.files[0];
   if(f) addFile(f,f.type==='image/gif'?'image':'video');
   e.target.value='';
+});
+
+editor.addEventListener('paste',e=>{
+  const text=(e.clipboardData||window.clipboardData)?.getData('text/plain')||'';
+  if(youtubeIdFromUrl(text)){
+    e.preventDefault();
+    remember();
+    insertYoutube(text);
+  }
 });
 
 function cleanEditorHtml(){
@@ -558,7 +597,7 @@ h1{font-size:54px;line-height:1.03;margin:0 0 12px;font-weight:800;letter-spacin
 .meta::after{content:"";height:1px;background:#aaa;flex:1;min-width:60px}
 h2{font-size:24px;line-height:1.22;margin:30px 0 10px;font-weight:600;letter-spacing:-.01em}
 p{font-size:18px;line-height:1.58;margin:0 0 16px;font-weight:400}
-img,video{display:block;width:100%;height:auto;margin:22px 0 30px;border-radius:0}
+img,video{display:block;width:100%;height:auto;margin:22px 0 30px;border-radius:0}.youtube-embed{position:relative;width:100%;aspect-ratio:16/9;margin:22px 0 30px}.youtube-embed iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
 .lead{font-size:25px;line-height:1.23;font-weight:700;letter-spacing:-.02em;margin:0 0 28px}
 .back{display:inline-flex;align-items:center;justify-content:center;margin-top:26px;padding:9px 14px;border:1px solid #a7a7a7;border-radius:999px;color:#171717;text-decoration:none;font-size:14px;font-weight:600}
 .back:hover{border-color:#171717}
