@@ -7,7 +7,7 @@ const tg = (token, method, body) =>
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "source-scan-multi-draft-delete";
+const BUILD_VERSION = "source-date-on-drafts";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -250,6 +250,67 @@ async function fetchSourceOgImage(sourceUrl) {
     }
   } catch {}
   return null;
+}
+
+
+async function fetchSourcePublicationDate(sourceUrl) {
+  try {
+    const r = await fetch(sourceUrl, {
+      headers: { "user-agent": "Mozilla/5.0 NASIROFF-Content-Bot/1.0" },
+      redirect: "follow"
+    });
+    if (!r.ok) return null;
+    const type = r.headers.get("content-type") || "";
+    if (!type.includes("text/html")) return null;
+
+    const html = (await r.text()).slice(0, 1200000);
+    const candidates = [];
+
+    const metaPatterns = [
+      /<meta[^>]+property=["']article:modified_time["'][^>]+content=["']([^"']+)["'][^>]*>/i,
+      /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']article:modified_time["'][^>]*>/i,
+      /<meta[^>]+property=["']article:published_time["'][^>]+content=["']([^"']+)["'][^>]*>/i,
+      /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']article:published_time["'][^>]*>/i,
+      /<meta[^>]+name=["']date["'][^>]+content=["']([^"']+)["'][^>]*>/i,
+      /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']date["'][^>]*>/i,
+      /<time[^>]+datetime=["']([^"']+)["'][^>]*>/i
+    ];
+
+    for (const re of metaPatterns) {
+      const m = html.match(re);
+      if (m?.[1]) candidates.push(m[1]);
+    }
+
+    const jsonDatePatterns = [
+      /"dateModified"\s*:\s*"([^"]+)"/i,
+      /"datePublished"\s*:\s*"([^"]+)"/i,
+      /"uploadDate"\s*:\s*"([^"]+)"/i
+    ];
+    for (const re of jsonDatePatterns) {
+      const m = html.match(re);
+      if (m?.[1]) candidates.push(m[1]);
+    }
+
+    const parsed = candidates
+      .map(v => ({ raw: v, time: Date.parse(v) }))
+      .filter(x => Number.isFinite(x.time))
+      .sort((a,b) => b.time - a.time);
+
+    if (!parsed.length) return null;
+
+    const chosen = parsed[0];
+    return {
+      iso: new Date(chosen.time).toISOString(),
+      display: new Intl.DateTimeFormat("az-AZ", {
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+        timeZone: "Asia/Baku"
+      }).format(new Date(chosen.time))
+    };
+  } catch {
+    return null;
+  }
 }
 
 async function cacheRemoteImage(env, origin, imageUrl) {
@@ -502,7 +563,10 @@ Qaydalar:
 async function createSourceDraft(env, origin, sourceUrl, userId) {
   const draft = await geminiDraftFromSource(env, sourceUrl);
   const articleId = buildArticleId(draft.title);
-  const originalImage = await fetchSourceOgImage(sourceUrl);
+  const [originalImage, sourceDate] = await Promise.all([
+    fetchSourceOgImage(sourceUrl),
+    fetchSourcePublicationDate(sourceUrl)
+  ]);
   const cachedImage = await cacheRemoteImage(env, origin, originalImage);
   const imageUrl = cachedImage || originalImage || "";
   const html = buildArticleHtmlFromDraft(draft, sourceUrl, imageUrl);
@@ -514,6 +578,8 @@ async function createSourceDraft(env, origin, sourceUrl, userId) {
     mediaKeys: extractMediaKeys(html),
     sourceUrl,
     sourceImageUrl: originalImage || null,
+    sourcePublishedAt: sourceDate?.iso || null,
+    sourcePublishedDisplay: sourceDate?.display || null,
     ownerTelegramId: String(userId),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
@@ -2003,7 +2069,10 @@ ${bodyHtml}
               const caption = telegramCaptionFromHtml(record.html, articleUrl);
               const cover = record.html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] || "";
               const categoryLabel = item.category ? `#${item.category}\n\n` : "";
-              const finalCaption = `${categoryLabel}${caption}`;
+              const dateLabel = record.sourcePublishedDisplay
+                ? `📅 Mənbədə son paylaşım tarixi: ${record.sourcePublishedDisplay}\n\n`
+                : "📅 Mənbədə paylaşım tarixi göstərilməyib\n\n";
+              const finalCaption = `${categoryLabel}${dateLabel}${caption}`;
 
               const replyMarkup = {
                 inline_keyboard: [
