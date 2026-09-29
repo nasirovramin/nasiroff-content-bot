@@ -32,8 +32,8 @@ jobs:
           const tplEnd=src.indexOf('`;\n\n        return new Response(html', tplBodyStart);
           if(route<0||tplStart<0||tplEnd<0) throw new Error('editor template not found');
           const raw=src.slice(tplBodyStart,tplEnd);
-          const render=new Function('ARTICLE_TITLE','articleUrl','apiUrl','mediaApiUrl','BUILD_VERSION','defaultArticleHtml','return `'+raw+'`;');
-          const html=render('Title','https://example.com/article','https://example.com/api','https://example.com/media','test',()=>'<p>test</p>');
+          const render=new Function('ARTICLE_TITLE','articleUrl','previewUrl','apiUrl','mediaApiUrl','BUILD_VERSION','defaultArticleHtml','initialEditorHtml','return `'+raw+'`;');
+          const html=render('Title','https://example.com/article','https://example.com/preview','https://example.com/api','https://example.com/media','test',()=>'<p>test</p>','<p>test</p>');
           const s=html.indexOf('<script>');
           const e=html.indexOf('</script>',s);
           if(s<0||e<0) throw new Error('rendered editor script not found');
