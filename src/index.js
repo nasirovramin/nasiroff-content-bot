@@ -7,7 +7,7 @@ const tg = (token, method, body) =>
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "media-controls-v3";
+const BUILD_VERSION = "toolbar-v4";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -369,6 +369,13 @@ button.primary{background:#171717;color:#fff;border-color:#171717}
 .media-wrap .remove{position:absolute;right:8px;top:8px;background:#fff;border:1px solid #ddd;border-radius:999px;padding:6px 9px;font-size:12px}
 .tip{max-width:960px;margin:18px auto 0;color:#666;font-size:13px;padding:0 4px}
 .status{margin-left:auto;align-self:center;font-size:13px;color:#666}
+.format-btn{min-width:42px;font-size:18px;font-weight:750}
+.italic-btn{font-family:Georgia,serif;font-style:italic;font-weight:700}
+.emoji-holder{position:relative;display:inline-flex}
+.emoji-panel{position:absolute;top:calc(100% + 8px);left:0;z-index:80;width:290px;max-height:250px;overflow:auto;background:#fff;border:1px solid #ddd;border-radius:12px;padding:10px;box-shadow:0 12px 35px rgba(0,0,0,.16);display:none;grid-template-columns:repeat(7,1fr);gap:5px}
+.emoji-panel.open{display:grid}
+.emoji-panel button{border:0;background:transparent;padding:6px;font-size:21px;border-radius:7px}
+.emoji-panel button:hover{background:#f1f1f1}
 @media(max-width:640px){
   .wrap{margin:0;background:#fff;box-shadow:none;padding:22px 18px 48px}
   #editor h1{font-size:36px}
@@ -381,15 +388,21 @@ button.primary{background:#171717;color:#fff;border-color:#171717}
 </head>
 <body>
 <div class="toolbar">
-  <button type="button" onclick="fmt('bold')">Bold</button>
-  <button type="button" onclick="fmt('formatBlock','h2')">H2</button>
-  <button type="button" onclick="fmt('formatBlock','p')">Text</button>
+  <button class="format-btn has-tip" type="button" title="Bold" data-tip="Bold" onmousedown="event.preventDefault()" onclick="fmt('bold')"><b>B</b></button>
+  <button class="format-btn italic-btn has-tip" type="button" title="Italic" data-tip="Italic" onmousedown="event.preventDefault()" onclick="fmt('italic')">I</button>
+  <button class="icon-btn has-tip" type="button" title="Link əlavə et" data-tip="Seçilmiş textə link ver" onmousedown="event.preventDefault()" onclick="addLink()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"></path><path d="M14 11a5 5 0 0 0-7.1-.1l-2 2a5 5 0 0 0 7.1 7.1l1.1-1.1"></path></svg><span>Link</span></button>
+  <button type="button" onmousedown="event.preventDefault()" onclick="fmt('formatBlock','h2')">H2</button>
+  <button type="button" onmousedown="event.preventDefault()" onclick="fmt('formatBlock','p')">Text</button>
   <button class="icon-btn has-tip" type="button" title="Şəkil əlavə et · Tövsiyə olunan ölçü: 1200 × 628 px" data-tip="Şəkil əlavə et · 1200 × 628 px" onclick="document.getElementById('imageInput').click()"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="16.5" cy="9" r="1.5"></circle><path d="M4 17l5-5 4 4 3-3 4 4"></path></svg><span>Şəkil</span></button>
-  <button class="icon-btn has-tip" type="button" title="Video/GIF əlavə et · Tövsiyə olunan ölçü: 1200 × 628 px" data-tip="Video/GIF əlavə et · 1200 × 628 px" onclick="document.getElementById('videoInput').click()"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="2"></rect><path d="M3 10h18"></path><path d="M7 6l3 4"></path><path d="M12 6l3 4"></path><path d="M10 13.2l5 3-5 3z" fill="currentColor" stroke="none"></path></svg><span>Video/GIF</span></button>
+  <button class="icon-btn has-tip" type="button" title="Video/GIF əlavə et · Tövsiyə olunan ölçü: 1200 × 628 px" data-tip="Video/GIF əlavə et · 1200 × 628 px" onclick="document.getElementById('videoInput').click()"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="2"></rect><path d="M3 10h18"></path><path d="M7 6l3 4"></path><path d="M12 6l3 4"></path><path d="M10 13.2l5 3-5 3z" fill="currentColor" stroke="none"></path></svg><span>Video</span></button>
   <input id="imageInput" type="file" accept="image/*" hidden>
   <input id="videoInput" type="file" accept="video/*,image/gif" hidden>
   <input id="imageReplaceInput" type="file" accept="image/*" hidden>
   <input id="videoReplaceInput" type="file" accept="video/*,image/gif" hidden>
+  <span class="emoji-holder">
+    <button class="icon-btn has-tip" id="emojiToggle" type="button" title="Emoji əlavə et" data-tip="Emoji əlavə et" onmousedown="event.preventDefault()" onclick="toggleEmoji(event)"><span style="font-size:20px">☺</span><span>Emoji</span></button>
+    <span class="emoji-panel" id="emojiPanel"></span>
+  </span>
   <a class="btn" href="${articleUrl}" target="_blank">Preview</a>
   <button class="primary" type="button" onclick="saveDraft()">Save</button>
   <span id="status" class="status">Edit rejimi</span>
@@ -419,6 +432,81 @@ function fmt(cmd,val){
   document.execCommand(cmd,false,val||null);
   remember();
 }
+
+function restoreSelection(){
+  if(!savedRange) return false;
+  const s=window.getSelection();
+  s.removeAllRanges();
+  s.addRange(savedRange);
+  return true;
+}
+
+function addLink(){
+  if(!savedRange || savedRange.collapsed){
+    statusEl.textContent='Əvvəl link veriləcək texti seçin.';
+    return;
+  }
+  const href=prompt('Linki daxil edin:','https://');
+  if(!href) return;
+  let normalized=href.trim();
+  if(!/^https?:\/\//i.test(normalized) && !/^mailto:/i.test(normalized)) normalized='https://'+normalized;
+  editor.focus();
+  restoreSelection();
+  document.execCommand('createLink',false,normalized);
+  remember();
+  statusEl.textContent='Link əlavə edildi. Save edin.';
+}
+
+const EMOJIS=['😀','😃','😄','😁','😊','🙂','😉','😍','🥰','😘','😎','🤓','🤩','🥳','😂','🤣','🥲','😅','😇','🤔','🧐','😮','😲','😢','😭','😡','🤯','👍','👎','👏','🙌','👌','✌️','🤝','🙏','💪','👀','👁️','❤️','🖤','🤍','💛','💚','💙','💜','🔥','✨','⭐','💡','🎯','🚀','✅','❌','⚡','🎨','✏️','📌','📍','📎','🔗','📷','🎬','💻','📱','🏆','🎉','💬','🧠'];
+
+function buildEmojiPanel(){
+  const panel=document.getElementById('emojiPanel');
+  if(panel.children.length) return;
+  EMOJIS.forEach(ch=>{
+    const b=document.createElement('button');
+    b.type='button';
+    b.textContent=ch;
+    b.setAttribute('contenteditable','false');
+    b.onmousedown=e=>e.preventDefault();
+    b.onclick=e=>{
+      e.stopPropagation();
+      insertEmoji(ch);
+    };
+    panel.appendChild(b);
+  });
+}
+
+function toggleEmoji(e){
+  e.stopPropagation();
+  buildEmojiPanel();
+  document.getElementById('emojiPanel').classList.toggle('open');
+}
+
+function insertEmoji(ch){
+  editor.focus();
+  if(savedRange){
+    restoreSelection();
+    const node=document.createTextNode(ch);
+    const r=window.getSelection().getRangeAt(0);
+    r.deleteContents();
+    r.insertNode(node);
+    r.setStartAfter(node);
+    r.collapse(true);
+    const s=window.getSelection();
+    s.removeAllRanges();
+    s.addRange(r);
+    savedRange=r.cloneRange();
+  }else{
+    editor.appendChild(document.createTextNode(ch));
+  }
+  document.getElementById('emojiPanel').classList.remove('open');
+  statusEl.textContent='Emoji əlavə edildi. Save edin.';
+}
+
+document.addEventListener('click',e=>{
+  const holder=e.target.closest('.emoji-holder');
+  if(!holder) document.getElementById('emojiPanel')?.classList.remove('open');
+});
 
 function insertNode(node){
   editor.focus();
