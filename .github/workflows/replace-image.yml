@@ -1,0 +1,30 @@
+name: Replace test image
+
+on:
+  push:
+    branches: ["main.ru"]
+    paths:
+      - "replace-image-trigger.txt"
+
+permissions:
+  contents: write
+
+jobs:
+  replace:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main.ru
+      - name: Download test image
+        run: |
+          mkdir -p assets
+          curl -L --fail --show-error --silent "https://upload.wikimedia.org/wikipedia/commons/f/f5/Eye_Black_and_White_with_Color.jpg" -o assets/eyes.jpg
+          file assets/eyes.jpg
+      - name: Commit image
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/eyes.jpg
+          git commit -m "Replace test image from stable source" || exit 0
+          git push origin HEAD:main.ru
