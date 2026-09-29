@@ -34,21 +34,26 @@ export default {
 <style>
   *{box-sizing:border-box}
   html,body{margin:0;padding:0;background:#fff;color:#171717}
-  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;line-height:1.58;font-weight:400}
-  main{max-width:760px;margin:0 auto;padding:42px 22px 72px}
-  h1{font-size:42px;line-height:1.12;margin:0 0 12px;font-weight:750;letter-spacing:-.02em}
-  .meta{font-size:15px;color:#666;margin:0 0 28px}
-  h2{font-size:25px;line-height:1.24;margin:30px 0 10px;font-weight:500}
-  p{font-size:19px;margin:0 0 14px;font-weight:350}
-  img{display:block;width:100%;height:auto;margin:0 0 34px;border-radius:0}
-  .lead{font-size:21px;font-weight:350}
-  .back{display:inline-flex;align-items:center;justify-content:center;margin-top:32px;padding:12px 18px;border:1px solid #171717;border-radius:999px;color:#171717;text-decoration:none;font-size:16px;font-weight:650}
-  .back:hover{background:#171717;color:#fff}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;font-weight:400}
+  main{max-width:900px;margin:0 auto;padding:34px 28px 76px}
+  h1{font-size:54px;line-height:1.03;margin:0 0 12px;font-weight:800;letter-spacing:-.035em}
+  .meta{display:flex;align-items:center;gap:14px;font-size:16px;line-height:1.2;color:#747474;margin:0 0 34px}
+  .meta::after{content:"";height:1px;background:#aaa;flex:1;min-width:60px}
+  h2{font-size:24px;line-height:1.22;margin:30px 0 10px;font-weight:600;letter-spacing:-.01em}
+  p{font-size:18px;line-height:1.58;margin:0 0 16px;font-weight:400}
+  img{display:block;width:100%;height:auto;margin:0 0 30px;border-radius:0}
+  .lead{font-size:25px;line-height:1.23;font-weight:700;letter-spacing:-.02em;margin:0 0 28px}
+  .back{display:inline-flex;align-items:center;justify-content:center;margin-top:26px;padding:9px 14px;border:1px solid #a7a7a7;border-radius:999px;color:#171717;text-decoration:none;font-size:14px;font-weight:600}
+  .back:hover{border-color:#171717}
   @media(max-width:640px){
-    main{padding:26px 18px 56px}
-    h1{font-size:34px}
-    h2{font-size:23px}
-    p,.lead{font-size:18px}
+    main{padding:22px 18px 52px}
+    h1{font-size:36px;line-height:1.06;margin-bottom:10px}
+    .meta{font-size:13px;gap:10px;margin-bottom:22px}
+    h2{font-size:21px;margin-top:24px}
+    p{font-size:16px;line-height:1.55;margin-bottom:14px}
+    .lead{font-size:19px;line-height:1.28;margin-bottom:22px}
+    img{margin-bottom:22px}
+    .back{font-size:13px;padding:8px 12px}
   }
 </style>
 </head>
