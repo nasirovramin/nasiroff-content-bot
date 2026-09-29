@@ -5,5 +5,19 @@
   "vars": {
     "MAIN_CHANNEL": "@nasiroff_az",
     "TEST_CHANNEL": "-1004409605326"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "CMS",
+        "class_name": "CmsStore"
+      }
+    ]
+  },
+  "exports": {
+    "CmsStore": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    }
   }
 }
