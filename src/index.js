@@ -459,11 +459,18 @@ function insertYoutube(urlValue){
 }
 
 function mediaWrap(el){
-  if(el.parentElement && el.parentElement.classList.contains('media-wrap')) return;
-  const wrap=document.createElement('div');
-  wrap.className='media-wrap';
-  el.parentNode.insertBefore(wrap,el);
-  wrap.appendChild(el);
+  let wrap = el.parentElement && el.parentElement.classList.contains('media-wrap')
+    ? el.parentElement
+    : null;
+
+  if(!wrap){
+    wrap=document.createElement('div');
+    wrap.className='media-wrap';
+    el.parentNode.insertBefore(wrap,el);
+    wrap.appendChild(el);
+  }
+
+  if(wrap.querySelector(':scope > .media-actions')) return;
 
   const actions=document.createElement('div');
   actions.className='media-actions';
@@ -471,8 +478,10 @@ function mediaWrap(el){
 
   const replace=document.createElement('button');
   replace.type='button';
-  replace.textContent='Dəyiş';
-  replace.onclick=()=>{
+  replace.textContent='Edit';
+  replace.onclick=(e)=>{
+    e.preventDefault();
+    e.stopPropagation();
     window.__replaceTarget=el;
     const input=el.tagName==='VIDEO'
       ? document.getElementById('videoReplaceInput')
@@ -482,16 +491,17 @@ function mediaWrap(el){
 
   const rm=document.createElement('button');
   rm.type='button';
-  rm.textContent='Sil';
-  rm.onclick=()=>wrap.remove();
+  rm.textContent='Delete';
+  rm.onclick=(e)=>{
+    e.preventDefault();
+    e.stopPropagation();
+    wrap.remove();
+    statusEl.textContent='Media silindi. Save basın.';
+  };
 
   actions.appendChild(replace);
   actions.appendChild(rm);
   wrap.appendChild(actions);
-}
-
-function enhanceMedia(){
-  editor.querySelectorAll('img,video').forEach(mediaWrap);
 }
 
 async function addFile(file,type){
