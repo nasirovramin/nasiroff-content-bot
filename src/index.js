@@ -7,7 +7,7 @@ const tg = (token, method, body) =>
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "toolbar-premium-ui";
+const BUILD_VERSION = "status-right-ui";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -385,7 +385,7 @@ html,body{margin:0;background:#f4f4f4;color:#171717;font-family:-apple-system,Bl
 .media-actions button{background:rgba(255,255,255,.78);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.68);border-radius:999px;padding:9px 14px;font-size:13px;font-weight:700;box-shadow:0 3px 14px rgba(0,0,0,.14)}
 .media-actions button:hover{background:rgba(255,255,255,.94)}
 .tip{max-width:960px;margin:18px auto 0;color:#666;font-size:13px;padding:0 4px}
-.status{width:100%;order:20;font-size:13px;font-weight:700;color:#666;margin-top:2px}.status.success{color:#0f5b32}.status.error{color:#7d1d1d}.status.neutral{color:#666}
+.status{margin-left:auto;align-self:center;font-size:13px;font-weight:700;color:#666;white-space:nowrap}.status.success{color:#0f5b32}.status.error{color:#7d1d1d}.status.neutral{color:#666}
 .emoji-holder,.link-holder{position:relative;display:inline-flex}.emoji-holder>summary,.link-holder>summary{list-style:none;cursor:pointer;user-select:none}.emoji-holder>summary::-webkit-details-marker,.link-holder>summary::-webkit-details-marker{display:none}
 .emoji-panel{position:absolute;top:calc(100% + 8px);left:0;z-index:80;width:290px;max-height:250px;overflow:auto;background:#fff;border:1px solid #ddd;border-radius:12px;padding:10px;box-shadow:0 12px 35px rgba(0,0,0,.16);display:none;grid-template-columns:repeat(7,1fr);gap:5px}
 .emoji-holder[open]>.emoji-panel{display:grid}
@@ -409,7 +409,7 @@ html,body{margin:0;background:#f4f4f4;color:#171717;font-family:-apple-system,Bl
   #editor h2{font-size:21px}
   #editor p{font-size:16px}
   #editor .lead{font-size:19px}
-  .status{width:100%;margin-left:0}
+  .status{margin-left:auto;width:auto}
 }
 </style>
 </head>
