@@ -7,6 +7,7 @@ const tg = (token, method, body) =>
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
+const BUILD_VERSION = "media-controls-v2";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -208,6 +209,13 @@ export default {
     const url = new URL(request.url);
     const imageSource = "https://raw.githubusercontent.com/nasirovramin/nasiroff-content-bot/main.ru/assets/eyes.jpg";
 
+    if (url.pathname === "/version") {
+      return new Response(BUILD_VERSION, {
+        headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" }
+      });
+    }
+
+
     if (url.pathname === "/api/article/dord-baxis") {
       const userId = url.searchParams.get("u");
       const sig = url.searchParams.get("sig");
@@ -357,7 +365,7 @@ button.primary{background:#171717;color:#fff;border-color:#171717}
 #editor p{font-size:18px;line-height:1.58;margin:0 0 16px}
 #editor .lead{font-size:25px;line-height:1.23;font-weight:700;margin:0 0 28px}
 #editor img,#editor video{display:block;width:100%;height:auto;margin:22px 0 28px}.youtube-embed{position:relative;width:100%;aspect-ratio:16/9;margin:22px 0 28px}.youtube-embed iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
-.media-wrap{position:relative}
+.media-wrap{position:relative;display:block;isolation:isolate}
 .media-wrap .remove{position:absolute;right:8px;top:8px;background:#fff;border:1px solid #ddd;border-radius:999px;padding:6px 9px;font-size:12px}
 .tip{max-width:960px;margin:18px auto 0;color:#666;font-size:13px;padding:0 4px}
 .status{margin-left:auto;align-self:center;font-size:13px;color:#666}
@@ -470,7 +478,7 @@ function mediaWrap(el){
     wrap.appendChild(el);
   }
 
-  if(wrap.querySelector(':scope > .media-actions')) return;
+  if(wrap.querySelector('.media-actions')) return;
 
   const actions=document.createElement('div');
   actions.className='media-actions';
