@@ -34,12 +34,12 @@ export default {
 <style>
   *{box-sizing:border-box}
   html,body{margin:0;padding:0;background:#fff;color:#171717}
-  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;line-height:1.68}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;line-height:1.5}
   main{max-width:760px;margin:0 auto;padding:42px 22px 72px}
   h1{font-size:42px;line-height:1.12;margin:0 0 12px;font-weight:750;letter-spacing:-.02em}
   .meta{font-size:15px;color:#666;margin:0 0 28px}
-  h2{font-size:25px;line-height:1.25;margin:38px 0 12px;font-weight:700}
-  p{font-size:19px;margin:0 0 20px}
+  h2{font-size:25px;line-height:1.22;margin:30px 0 10px;font-weight:700}
+  p{font-size:19px;margin:0 0 14px}
   img{display:block;width:100%;height:auto;margin:0 0 34px;border-radius:0}
   .lead{font-size:21px}
   .back{display:inline-flex;align-items:center;justify-content:center;margin-top:32px;padding:12px 18px;border:1px solid #171717;border-radius:999px;color:#171717;text-decoration:none;font-size:16px;font-weight:650}
