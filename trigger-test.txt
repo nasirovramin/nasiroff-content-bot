@@ -1,1 +1,1 @@
-trigger after stable image replacement v11
+trigger compact article spacing test v12
