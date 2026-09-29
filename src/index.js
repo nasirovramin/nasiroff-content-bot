@@ -7,7 +7,7 @@ const tg = (token, method, body) =>
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "media-no-cache";
+const BUILD_VERSION = "save-refresh-latest";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -471,6 +471,12 @@ const statusEl=document.getElementById('status');
 const saveBtn=document.getElementById('saveBtn');
 let isDirty=false;
 
+window.addEventListener('pageshow',e=>{
+  if(e.persisted){
+    window.location.reload();
+  }
+});
+
 function setStatus(message,type='neutral'){
   statusEl.textContent=message;
   statusEl.classList.remove('success','error','neutral');
@@ -902,8 +908,10 @@ async function saveDraft(){
   setTimeout(()=>{
     window.close();
     setTimeout(()=>{
-      if(document.visibilityState==='visible' && history.length>1) history.back();
-    },250);
+      if(document.visibilityState==='visible'){
+        window.location.replace(window.location.href);
+      }
+    },300);
   },350);
 }
 
