@@ -7,7 +7,7 @@ const tg = (token, method, body) =>
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "status-right-ui";
+const BUILD_VERSION = "link-icon-large";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -363,6 +363,7 @@ html,body{margin:0;background:#f4f4f4;color:#171717;font-family:-apple-system,Bl
 .toolbar button:active,.toolbar .btn:active,.toolbar summary.icon-btn:active{transform:translateY(1px)}
 .toolbar .icon-btn{width:58px;min-width:58px;padding:0}
 .toolbar .icon-btn svg{width:26px;height:26px;display:block;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.toolbar .link-holder .icon-btn svg{width:34px;height:34px;stroke-width:3.4}
 .toolbar .format-btn{min-width:58px;padding:0 16px;font-size:24px}
 .toolbar .italic-btn{font-family:Georgia,serif;font-style:italic;font-weight:700}
 .toolbar a.btn{min-width:118px}
@@ -420,7 +421,7 @@ html,body{margin:0;background:#f4f4f4;color:#171717;font-family:-apple-system,Bl
 
   <details class="link-holder" id="linkDetails">
     <summary class="icon-btn has-tip" title="Link əlavə et / sil" data-tip="Link əlavə et / sil" onmousedown="remember()" onclick="return handleLinkSummary(event)">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"></path><path d="M14 11a5 5 0 0 0-7.1-.1l-2 2a5 5 0 0 0 7.1 7.1l1.1-1.1"></path></svg>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.2 14.8 6.8 17.2a4.2 4.2 0 0 1-5.9-5.9l4.3-4.3a4.2 4.2 0 0 1 5.9 0"></path><path d="M14.8 9.2l2.4-2.4a4.2 4.2 0 1 1 5.9 5.9l-4.3 4.3a4.2 4.2 0 0 1-5.9 0"></path><path d="M8.5 15.5l7-7"></path></svg>
     </summary>
     <span class="link-panel">
       <input id="linkInput" type="url" placeholder="https://..." autocomplete="off">
