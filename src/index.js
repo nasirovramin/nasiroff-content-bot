@@ -7,7 +7,7 @@ const tg = (token, method, body) =>
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "source-to-draft-multi-article";
+const BUILD_VERSION = "source-scan-multi-draft-delete";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -280,6 +280,150 @@ async function cacheRemoteImage(env, origin, imageUrl) {
   }
 }
 
+
+function normalizeCandidateUrl(raw, baseUrl) {
+  try {
+    const u = new URL(raw, baseUrl);
+    if (!["http:", "https:"].includes(u.protocol)) return null;
+    u.hash = "";
+    for (const key of ["utm_source","utm_medium","utm_campaign","utm_content","utm_term","fbclid","gclid"]) {
+      u.searchParams.delete(key);
+    }
+    return u.href;
+  } catch {
+    return null;
+  }
+}
+
+function looksLikeContentUrl(candidate, sourceUrl) {
+  try {
+    const u = new URL(candidate);
+    const src = new URL(sourceUrl);
+    const p = u.pathname.toLowerCase();
+    if (/\.(jpg|jpeg|png|gif|webp|svg|pdf|zip|mp4|mp3|css|js)$/i.test(p)) return false;
+    if (/\/(tag|tags|category|categories|author|authors|about|contact|privacy|terms|login|signup|search)(\/|$)/i.test(p)) return false;
+    if (u.hostname === "t.me") return /\/[^/]+\/\d+/.test(p);
+    if (u.hostname !== src.hostname) {
+      return !/(facebook|instagram|linkedin|youtube|x\.com|twitter)\./i.test(u.hostname);
+    }
+    return p !== "/" && p.length > 4;
+  } catch {
+    return false;
+  }
+}
+
+async function extractSourceCandidates(sourceUrl) {
+  const r = await fetch(sourceUrl, {
+    headers: { "user-agent": "Mozilla/5.0 NASIROFF-Content-Bot/1.0" },
+    redirect: "follow"
+  });
+  if (!r.ok) throw new Error(`Source_${r.status}`);
+  const type = r.headers.get("content-type") || "";
+  if (!type.includes("text/html")) return [];
+
+  const html = (await r.text()).slice(0, 1200000);
+  const out = [];
+  const seen = new Set();
+  const re = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let m;
+  while ((m = re.exec(html)) && out.length < 160) {
+    const href = normalizeCandidateUrl(m[1], sourceUrl);
+    if (!href || seen.has(href) || !looksLikeContentUrl(href, sourceUrl)) continue;
+    const label = cleanText(m[2]).slice(0, 180);
+    if (label.length < 3) continue;
+    seen.add(href);
+    out.push({ url: href, title: label });
+  }
+  return out;
+}
+
+async function discoverRelevantSourceItems(env, sourceUrl) {
+  if (!env.GEMINI_API_KEY) throw new Error("GEMINI_API_KEY_missing");
+
+  const candidates = await extractSourceCandidates(sourceUrl);
+  if (!candidates.length) {
+    return [{ url: sourceUrl, title: "", category: "unknown" }];
+  }
+
+  const compact = candidates.slice(0, 100);
+  const model = env.GEMINI_MODEL || "gemini-3.5-flash";
+  const prompt = `
+Sən dizayn və kreativ industriyası üçün redaktor kimi işləyirsən.
+Aşağıdakı mənbədən çıxarılmış namizəd linklər arasından yalnız həqiqətən faydalı materialları seç.
+
+Uyğun mövzular:
+- branding
+- visual identity / brand identity
+- packaging design
+- typography / type design
+- advertising / campaign
+- art direction / creative direction
+- AI və design technology
+
+Qaydalar:
+- Uyğun olmayan biznes, siyasət, ümumi texnologiya, şou-biznes və reklam xarakterli səhifələri seçmə.
+- Eyni mövzudan çox oxşar materialları azalt, kateqoriyalar arasında balans saxla.
+- Maksimum 8 material seç.
+- Mümkün qədər yeni və məqalə/post tipli URL-ləri seç.
+- Yalnız verilmiş URL-lərdən istifadə et, URL uydurma.
+- Hər seçimin category sahəsini bu dəyərlərdən biri et:
+  Branding, VisualIdentity, Packaging, Typography, Campaign, ArtDirection, AI
+- Heç nə uyğun deyilsə boş items qaytar.
+
+Mənbə: ${sourceUrl}
+
+Namizədlər:
+${compact.map((x,i)=>`${i+1}. [${x.title}] ${x.url}`).join("\n")}
+`;
+
+  const schema = {
+    type: "OBJECT",
+    properties: {
+      items: {
+        type: "ARRAY",
+        items: {
+          type: "OBJECT",
+          properties: {
+            url: { type: "STRING" },
+            title: { type: "STRING" },
+            category: { type: "STRING" }
+          },
+          required: ["url", "title", "category"]
+        }
+      }
+    },
+    required: ["items"]
+  };
+
+  const r2 = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-goog-api-key": env.GEMINI_API_KEY
+      },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          response_mime_type: "application/json",
+          response_schema: schema,
+          temperature: 0.1
+        }
+      })
+    }
+  );
+
+  const data = await r2.json();
+  if (!r2.ok) throw new Error(`Gemini_discovery_${r2.status}_${data?.error?.message || "error"}`);
+  const raw = (data?.candidates?.[0]?.content?.parts || []).map(p=>p?.text || "").join("").trim();
+  const parsed = raw ? JSON.parse(raw) : { items: [] };
+  const allowed = new Set(compact.map(x => x.url));
+  return (Array.isArray(parsed.items) ? parsed.items : [])
+    .filter(x => x?.url && allowed.has(x.url))
+    .slice(0, 8);
+}
+
 async function geminiDraftFromSource(env, sourceUrl) {
   if (!env.GEMINI_API_KEY) {
     throw new Error("GEMINI_API_KEY_missing");
@@ -407,6 +551,33 @@ async function cmsPutArticle(env, record, articleId = record?.id || ARTICLE_ID) 
     method: "PUT",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(record)
+  });
+}
+
+async function cmsDeleteArticle(env, articleId) {
+  const path = articleId === ARTICLE_ID ? "/article" : `/article/${encodeURIComponent(articleId)}`;
+  return cmsStub(env).fetch(`https://cms.internal${path}`, { method: "DELETE" });
+}
+
+async function sourceSeenKey(sourceUrl) {
+  const digest = await crypto.subtle.digest("SHA-256", enc.encode(sourceUrl));
+  return [...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,"0")).join("");
+}
+
+async function cmsIsSourceSeen(env, sourceUrl) {
+  const key = await sourceSeenKey(sourceUrl);
+  const r = await cmsStub(env).fetch(`https://cms.internal/seen/${key}`);
+  if (!r.ok) return false;
+  const data = await r.json();
+  return !!data?.seen;
+}
+
+async function cmsMarkSourceSeen(env, sourceUrl, articleId) {
+  const key = await sourceSeenKey(sourceUrl);
+  return cmsStub(env).fetch(`https://cms.internal/seen/${key}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ seen: true, sourceUrl, articleId, at: new Date().toISOString() })
   });
 }
 
@@ -551,6 +722,24 @@ export class CmsStore {
       if (request.method === "PUT") {
         const article = await request.json();
         await this.ctx.storage.put(key, article);
+        return json({ ok: true });
+      }
+      if (request.method === "DELETE") {
+        await this.ctx.storage.delete(key);
+        return json({ ok: true });
+      }
+    }
+
+    if (url.pathname.startsWith("/seen/")) {
+      const seenKey = decodeURIComponent(url.pathname.slice("/seen/".length));
+      const key = `seen:${seenKey}`;
+      if (request.method === "GET") {
+        const data = await this.ctx.storage.get(key);
+        return json(data || { seen: false });
+      }
+      if (request.method === "PUT") {
+        const data = await request.json();
+        await this.ctx.storage.put(key, data);
         return json({ ok: true });
       }
     }
@@ -1754,7 +1943,7 @@ ${bodyHtml}
       if (text === "/start") {
         await tg(env.BOT_TOKEN, "sendMessage", {
           chat_id: update.message.chat.id,
-          text: "Mənə mənbə linki, hazır mətn və ya şəkil göndər. Link göndərsən, mənbəni oxuyub Azərbaycan dilində draft hazırlayacağam və test kanalına göndərəcəyəm. Son draftı açmaq üçün /edit yaz."
+          text: "Mənə mənbə linki göndər. Mənbəni skan edib yalnız uyğun dizayn/branding mövzularını seçəcəyəm, hər birini Azərbaycan dilində ayrıca draft hazırlayıb test kanalına göndərəcəyəm. Orada Edit / Paylaş / Delete edə bilərsiniz. Son draftı açmaq üçün /edit yaz."
         });
         return new Response("ok");
       }
@@ -1778,64 +1967,99 @@ ${bodyHtml}
       if (sourceUrl) {
         await tg(env.BOT_TOKEN, "sendMessage", {
           chat_id: update.message.chat.id,
-          text: "Mənbəni oxuyuram və Azərbaycan dilində draft hazırlayıram…"
+          text: "Mənbəni skan edirəm, uyğun mövzuları seçib ayrı-ayrı draftlar hazırlayıram…"
         });
 
         try {
-          const record = await createSourceDraft(env, url.origin, sourceUrl, update.message.from.id);
-          const articleId = record.id;
-          const sig = await makeEditSig(env, articleId, update.message.from.id);
-          const editUrl = `${url.origin}/edit/${encodeURIComponent(articleId)}?u=${encodeURIComponent(update.message.from.id)}&sig=${sig}`;
-          const articleUrl = `${url.origin}/article/${encodeURIComponent(articleId)}`;
-          const caption = telegramCaptionFromHtml(record.html, articleUrl);
-          const cover = record.html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] || "";
-
-          const replyMarkup = {
-            inline_keyboard: [
-              [{ text: "✏️ Edit", url: editUrl }],
-              [
-                { text: "✅ Paylaş", callback_data: `publish:${articleId}` },
-                { text: "❌ Yox", callback_data: `reject:${articleId}` }
-              ]
-            ]
-          };
-
-          let posted;
-          if (cover) {
-            posted = await tg(env.BOT_TOKEN, "sendPhoto", {
-              chat_id: env.TEST_CHANNEL,
-              photo: cover,
-              caption,
-              parse_mode: "HTML",
-              reply_markup: replyMarkup
-            });
-          } else {
-            posted = await tg(env.BOT_TOKEN, "sendMessage", {
-              chat_id: env.TEST_CHANNEL,
-              text: caption,
-              parse_mode: "HTML",
-              disable_web_page_preview: false,
-              reply_markup: replyMarkup
-            });
+          const discovered = await discoverRelevantSourceItems(env, sourceUrl);
+          const fresh = [];
+          for (const item of discovered) {
+            if (!(await cmsIsSourceSeen(env, item.url))) fresh.push(item);
           }
-          const postedData = await posted.json();
+
+          if (!fresh.length) {
+            await tg(env.BOT_TOKEN, "sendMessage", {
+              chat_id: update.message.chat.id,
+              text: discovered.length
+                ? "Bu mənbədə yeni uyğun material tapılmadı. Əvvəl göndərilənlər təkrar paylaşılmadı."
+                : "Bu mənbədə seçdiyimiz mövzulara uyğun material tapılmadı."
+            });
+            return new Response("ok");
+          }
+
+          let created = 0;
+          let failed = 0;
+
+          for (const item of fresh.slice(0, 8)) {
+            try {
+              const record = await createSourceDraft(env, url.origin, item.url, update.message.from.id);
+              record.category = item.category || null;
+              await cmsPutArticle(env, record, record.id);
+
+              const articleId = record.id;
+              const sig = await makeEditSig(env, articleId, update.message.from.id);
+              const editUrl = `${url.origin}/edit/${encodeURIComponent(articleId)}?u=${encodeURIComponent(update.message.from.id)}&sig=${sig}`;
+              const articleUrl = `${url.origin}/article/${encodeURIComponent(articleId)}`;
+              const caption = telegramCaptionFromHtml(record.html, articleUrl);
+              const cover = record.html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] || "";
+              const categoryLabel = item.category ? `#${item.category}\n\n` : "";
+              const finalCaption = `${categoryLabel}${caption}`;
+
+              const replyMarkup = {
+                inline_keyboard: [
+                  [{ text: "✏️ Edit", url: editUrl }],
+                  [
+                    { text: "✅ Paylaş", callback_data: `publish:${articleId}` },
+                    { text: "🗑 Delete", callback_data: `delete:${articleId}` }
+                  ]
+                ]
+              };
+
+              let posted;
+              if (cover) {
+                posted = await tg(env.BOT_TOKEN, "sendPhoto", {
+                  chat_id: env.TEST_CHANNEL,
+                  photo: cover,
+                  caption: finalCaption,
+                  parse_mode: "HTML",
+                  reply_markup: replyMarkup
+                });
+              } else {
+                posted = await tg(env.BOT_TOKEN, "sendMessage", {
+                  chat_id: env.TEST_CHANNEL,
+                  text: finalCaption,
+                  parse_mode: "HTML",
+                  disable_web_page_preview: false,
+                  reply_markup: replyMarkup
+                });
+              }
+
+              const postedData = await posted.json();
+              if (postedData.ok) {
+                record.testMessageId = postedData.result.message_id;
+                record.testMessageType = cover ? "media" : "text";
+                await cmsPutArticle(env, record, articleId);
+                await cmsMarkSourceSeen(env, item.url, articleId);
+                created++;
+              } else {
+                failed++;
+              }
+            } catch {
+              failed++;
+            }
+          }
 
           await tg(env.BOT_TOKEN, "sendMessage", {
             chat_id: update.message.chat.id,
-            text: postedData.ok
-              ? "Draft hazırdır və test kanalına göndərildi ✅"
-              : "Draft hazırlandı, amma test kanalına göndərmək alınmadı.",
-            reply_markup: {
-              inline_keyboard: [[{ text: "✏️ Draftı aç", url: editUrl }]]
-            }
+            text: `Mənbə yoxlanıldı ✅\nUyğun yeni draft: ${created}${failed ? `\nHazırlanmayan: ${failed}` : ""}\nHər draft test kanalında ayrıca Edit / Paylaş / Delete ilə göndərildi.`
           });
         } catch (e) {
           const missingKey = String(e?.message || "").includes("GEMINI_API_KEY_missing");
           await tg(env.BOT_TOKEN, "sendMessage", {
             chat_id: update.message.chat.id,
             text: missingKey
-              ? "Gemini API açarı Worker-də yoxdur. GEMINI_API_KEY secret əlavə edilməlidir."
-              : `Mənbəni hazırlamaq alınmadı: ${String(e?.message || e).slice(0, 300)}`
+              ? "Gemini API açarı Worker-də yoxdur. GEMINI_API_KEY Secret əlavə edilməlidir."
+              : `Mənbəni yoxlamaq alınmadı: ${String(e?.message || e).slice(0, 300)}`
           });
         }
         return new Response("ok");
@@ -1948,6 +2172,37 @@ ${bodyHtml}
           });
         }
 
+        return new Response("ok");
+      }
+
+      const deleteMatch = String(q.data || "").match(/^delete:(.+)$/);
+      if (deleteMatch) {
+        const deleteArticleId = deleteMatch[1];
+        const article = await cmsGetArticle(env, deleteArticleId);
+
+        if (article?.mediaKeys?.length) {
+          for (const key of article.mediaKeys) {
+            try { await cmsDeleteMedia(env, key); } catch {}
+          }
+        }
+        await cmsDeleteArticle(env, deleteArticleId);
+
+        await tg(env.BOT_TOKEN, "answerCallbackQuery", {
+          callback_query_id: q.id,
+          text: "Draft silindi 🗑"
+        });
+        const deleted = await tg(env.BOT_TOKEN, "deleteMessage", {
+          chat_id: msg.chat.id,
+          message_id: msg.message_id
+        });
+        const deletedData = await deleted.json().catch(()=>({}));
+        if (!deletedData.ok) {
+          await tg(env.BOT_TOKEN, "editMessageReplyMarkup", {
+            chat_id: msg.chat.id,
+            message_id: msg.message_id,
+            reply_markup: { inline_keyboard: [] }
+          });
+        }
         return new Response("ok");
       }
 
