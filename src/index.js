@@ -346,7 +346,7 @@ export default {
 *{box-sizing:border-box}
 html,body{margin:0;background:#f4f4f4;color:#171717;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}
 .toolbar{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.96);backdrop-filter:blur(10px);border-bottom:1px solid #ddd;padding:10px 14px;display:flex;gap:8px;flex-wrap:wrap}
-button,.btn{border:1px solid #cfcfcf;background:#fff;color:#171717;border-radius:9px;padding:9px 12px;font-size:14px;font-weight:650;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:7px}.icon-btn svg{width:22px;height:22px;display:block;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+button,.btn{border:1px solid #cfcfcf;background:#fff;color:#171717;border-radius:9px;padding:9px 12px;font-size:14px;font-weight:650;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:7px}.icon-btn svg{width:22px;height:22px;display:block;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.has-tip{position:relative}.has-tip::after{content:attr(data-tip);position:absolute;left:50%;top:calc(100% + 8px);transform:translateX(-50%);background:#171717;color:#fff;font-size:12px;font-weight:500;line-height:1.35;padding:7px 9px;border-radius:7px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .15s ease;z-index:50}.has-tip:hover::after,.has-tip:focus-visible::after{opacity:1}
 button.primary{background:#171717;color:#fff;border-color:#171717}
 .wrap{max-width:960px;margin:22px auto 60px;background:#fff;padding:34px 30px 70px;box-shadow:0 4px 26px rgba(0,0,0,.06)}
 #editor{outline:none}
@@ -376,7 +376,7 @@ button.primary{background:#171717;color:#fff;border-color:#171717}
   <button type="button" onclick="fmt('bold')">Bold</button>
   <button type="button" onclick="fmt('formatBlock','h2')">H2</button>
   <button type="button" onclick="fmt('formatBlock','p')">Text</button>
-  <button class="icon-btn" type="button" title="Şəkil əlavə et" onclick="document.getElementById('imageInput').click()"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="16.5" cy="9" r="1.5"></circle><path d="M4 17l5-5 4 4 3-3 4 4"></path></svg><span>Şəkil</span></button>
+  <button class="icon-btn has-tip" type="button" title="Şəkil əlavə et · Tövsiyə olunan ölçü: 1200 × 628 px" data-tip="Şəkil əlavə et · 1200 × 628 px" onclick="document.getElementById('imageInput').click()"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="16.5" cy="9" r="1.5"></circle><path d="M4 17l5-5 4 4 3-3 4 4"></path></svg><span>Şəkil</span></button>
   <button class="icon-btn" type="button" title="Video/GIF əlavə et" onclick="document.getElementById('videoInput').click()"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="2"></rect><path d="M3 10h18"></path><path d="M7 6l3 4"></path><path d="M12 6l3 4"></path><path d="M10 13.2l5 3-5 3z" fill="currentColor" stroke="none"></path></svg><span>Video/GIF</span></button>
   <input id="imageInput" type="file" accept="image/*" hidden>
   <input id="videoInput" type="file" accept="video/*,image/gif" hidden>
