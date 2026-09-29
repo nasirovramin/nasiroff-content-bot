@@ -7,7 +7,7 @@ const tg = (token, method, body) =>
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "toolbar-v4";
+const BUILD_VERSION = "toolbar-v5";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -376,6 +376,11 @@ button.primary{background:#171717;color:#fff;border-color:#171717}
 .emoji-panel.open{display:grid}
 .emoji-panel button{border:0;background:transparent;padding:6px;font-size:21px;border-radius:7px}
 .emoji-panel button:hover{background:#f1f1f1}
+.link-holder{position:relative;display:inline-flex}
+.link-panel{position:absolute;top:calc(100% + 8px);left:0;z-index:85;display:none;gap:6px;align-items:center;background:#fff;border:1px solid #ddd;border-radius:10px;padding:8px;box-shadow:0 12px 35px rgba(0,0,0,.16)}
+.link-panel.open{display:flex}
+.link-panel input{width:240px;max-width:55vw;border:1px solid #ccc;border-radius:7px;padding:8px;font:inherit}
+.link-panel button{padding:8px 10px}
 @media(max-width:640px){
   .wrap{margin:0;background:#fff;box-shadow:none;padding:22px 18px 48px}
   #editor h1{font-size:36px}
@@ -390,7 +395,13 @@ button.primary{background:#171717;color:#fff;border-color:#171717}
 <div class="toolbar">
   <button class="format-btn has-tip" type="button" title="Bold" data-tip="Bold" onmousedown="event.preventDefault()" onclick="fmt('bold')"><b>B</b></button>
   <button class="format-btn italic-btn has-tip" type="button" title="Italic" data-tip="Italic" onmousedown="event.preventDefault()" onclick="fmt('italic')">I</button>
-  <button class="icon-btn has-tip" type="button" title="Link əlavə et" data-tip="Seçilmiş textə link ver" onmousedown="event.preventDefault()" onclick="addLink()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"></path><path d="M14 11a5 5 0 0 0-7.1-.1l-2 2a5 5 0 0 0 7.1 7.1l1.1-1.1"></path></svg><span>Link</span></button>
+  <span class="link-holder">
+    <button class="icon-btn has-tip" type="button" title="Link əlavə et" data-tip="Seçilmiş textə link ver" onmousedown="event.preventDefault()" onclick="toggleLinkPanel(event)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"></path><path d="M14 11a5 5 0 0 0-7.1-.1l-2 2a5 5 0 0 0 7.1 7.1l1.1-1.1"></path></svg><span>Link</span></button>
+    <span class="link-panel" id="linkPanel">
+      <input id="linkInput" type="url" placeholder="https://..." autocomplete="off">
+      <button type="button" onclick="applyLink()">OK</button>
+    </span>
+  </span>
   <button type="button" onmousedown="event.preventDefault()" onclick="fmt('formatBlock','h2')">H2</button>
   <button type="button" onmousedown="event.preventDefault()" onclick="fmt('formatBlock','p')">Text</button>
   <button class="icon-btn has-tip" type="button" title="Şəkil əlavə et · Tövsiyə olunan ölçü: 1200 × 628 px" data-tip="Şəkil əlavə et · 1200 × 628 px" onclick="document.getElementById('imageInput').click()"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="16.5" cy="9" r="1.5"></circle><path d="M4 17l5-5 4 4 3-3 4 4"></path></svg><span>Şəkil</span></button>
@@ -421,6 +432,13 @@ const statusEl=document.getElementById('status');
 editor.addEventListener('keyup',remember);
 editor.addEventListener('mouseup',remember);
 editor.addEventListener('touchend',remember);
+document.addEventListener('selectionchange',()=>{
+  const s=window.getSelection();
+  if(!s || !s.rangeCount) return;
+  const r=s.getRangeAt(0);
+  const node=r.commonAncestorContainer.nodeType===1?r.commonAncestorContainer:r.commonAncestorContainer.parentElement;
+  if(node && editor.contains(node)) savedRange=r.cloneRange();
+});
 
 function remember(){
   const s=window.getSelection();
@@ -441,19 +459,34 @@ function restoreSelection(){
   return true;
 }
 
-function addLink(){
+function toggleLinkPanel(e){
+  e.stopPropagation();
   if(!savedRange || savedRange.collapsed){
     statusEl.textContent='Əvvəl link veriləcək texti seçin.';
     return;
   }
-  const href=prompt('Linki daxil edin:','https://');
+  document.getElementById('emojiPanel')?.classList.remove('open');
+  const panel=document.getElementById('linkPanel');
+  panel.classList.toggle('open');
+  if(panel.classList.contains('open')){
+    setTimeout(()=>document.getElementById('linkInput').focus(),0);
+  }
+}
+
+function applyLink(){
+  if(!savedRange || savedRange.collapsed){
+    statusEl.textContent='Əvvəl link veriləcək texti seçin.';
+    return;
+  }
+  let href=document.getElementById('linkInput').value.trim();
   if(!href) return;
-  let normalized=href.trim();
-  if(!/^https?:\/\//i.test(normalized) && !/^mailto:/i.test(normalized)) normalized='https://'+normalized;
+  if(!/^https?:\/\//i.test(href) && !/^mailto:/i.test(href)) href='https://'+href;
   editor.focus();
   restoreSelection();
-  document.execCommand('createLink',false,normalized);
+  document.execCommand('createLink',false,href);
   remember();
+  document.getElementById('linkPanel').classList.remove('open');
+  document.getElementById('linkInput').value='';
   statusEl.textContent='Link əlavə edildi. Save edin.';
 }
 
@@ -478,9 +511,21 @@ function buildEmojiPanel(){
 
 function toggleEmoji(e){
   e.stopPropagation();
+  document.getElementById('linkPanel')?.classList.remove('open');
+  if(!savedRange){
+    editor.focus();
+    const r=document.createRange();
+    r.selectNodeContents(editor);
+    r.collapse(false);
+    savedRange=r.cloneRange();
+  }
   buildEmojiPanel();
   document.getElementById('emojiPanel').classList.toggle('open');
 }
+
+document.getElementById('linkInput')?.addEventListener('keydown',e=>{
+  if(e.key==='Enter'){e.preventDefault();applyLink();}
+});
 
 function insertEmoji(ch){
   editor.focus();
@@ -504,8 +549,8 @@ function insertEmoji(ch){
 }
 
 document.addEventListener('click',e=>{
-  const holder=e.target.closest('.emoji-holder');
-  if(!holder) document.getElementById('emojiPanel')?.classList.remove('open');
+  if(!e.target.closest('.emoji-holder')) document.getElementById('emojiPanel')?.classList.remove('open');
+  if(!e.target.closest('.link-holder')) document.getElementById('linkPanel')?.classList.remove('open');
 });
 
 function insertNode(node){
