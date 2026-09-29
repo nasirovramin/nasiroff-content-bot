@@ -349,6 +349,9 @@ export default {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Edit · ${ARTICLE_TITLE}</title>
 <style>
 *{box-sizing:border-box}
@@ -423,7 +426,7 @@ button.primary{background:#171717;color:#fff;border-color:#171717}
 
   <a class="btn" href="${articleUrl}" target="_blank">Preview</a>
   <button class="primary" type="button" onclick="saveDraft()">Save</button>
-  <span id="status" class="status">Edit rejimi · ${BUILD_VERSION}</span>
+  <span id="status" class="status">Edit rejimi</span>
 </div>
 <div class="tip">Mətndə istədiyin yerə kursoru qoy, sonra şəkil/video düyməsini bas. Media həmin nöqtəyə əlavə olunacaq.</div>
 <div class="wrap">
@@ -772,7 +775,13 @@ enhanceMedia();
 </html>`;
 
         return new Response(html, {
-          headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }
+          headers: {
+            "content-type": "text/html; charset=utf-8",
+            "cache-control": "no-store, no-cache, must-revalidate, max-age=0",
+            "pragma": "no-cache",
+            "expires": "0",
+            "surrogate-control": "no-store"
+          }
         });
       }
 
@@ -784,6 +793,9 @@ enhanceMedia();
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>${ARTICLE_TITLE}</title>
 <meta name="description" content="Kreativ prosesə dörd fərqli baxış: uşaq, İsida, Osiris və firon.">
 <style>
@@ -820,7 +832,13 @@ ${bodyHtml}
 </body>
 </html>`;
         return new Response(html, {
-          headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }
+          headers: {
+            "content-type": "text/html; charset=utf-8",
+            "cache-control": "no-store, no-cache, must-revalidate, max-age=0",
+            "pragma": "no-cache",
+            "expires": "0",
+            "surrogate-control": "no-store"
+          }
         });
       }
 
@@ -903,7 +921,7 @@ ${bodyHtml}
       if (text === "/edit") {
         const userId = update.message.from.id;
         const sig = await makeEditSig(env, ARTICLE_ID, userId);
-        const editUrl = `${url.origin}/edit/dord-baxis?u=${encodeURIComponent(userId)}&sig=${sig}&v=${BUILD_VERSION}`;
+        const editUrl = `${url.origin}/edit/dord-baxis?u=${encodeURIComponent(userId)}&sig=${sig}`;
         await tg(env.BOT_TOKEN, "sendMessage", {
           chat_id: update.message.chat.id,
           text: "Məqaləni açıb birbaşa səhifənin üzərində redaktə edə bilərsiniz.",
@@ -980,7 +998,7 @@ ${bodyHtml}
           });
 
           const editSig = await makeEditSig(env, ARTICLE_ID, q.from.id);
-          const editUrl = `${url.origin}/edit/dord-baxis?u=${encodeURIComponent(q.from.id)}&sig=${editSig}&v=${BUILD_VERSION}`;
+          const editUrl = `${url.origin}/edit/dord-baxis?u=${encodeURIComponent(q.from.id)}&sig=${editSig}`;
 
           await tg(env.BOT_TOKEN, "sendMessage", {
             chat_id: q.from.id,
