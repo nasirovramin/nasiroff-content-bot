@@ -7,7 +7,7 @@ const tg = (token, method, body) =>
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "linkedin-expiry-reminder";
+const BUILD_VERSION = "source-to-draft-multi-article";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -167,6 +167,218 @@ async function linkedinUpdateTextPost(env, postId, commentary) {
   };
 }
 
+
+function escHtml(value = "") {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function firstHttpUrl(text = "") {
+  const m = String(text).match(/https?:\/\/[^\s<>]+/i);
+  return m ? m[0].replace(/[),.;!?]+$/, "") : null;
+}
+
+function slugPart(value = "") {
+  const map = { "ə":"e","ı":"i","ö":"o","ü":"u","ş":"s","ç":"c","ğ":"g","Ə":"e","İ":"i","Ö":"o","Ü":"u","Ş":"s","Ç":"c","Ğ":"g" };
+  return String(value)
+    .split("").map(ch => map[ch] || ch).join("")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 32) || "meqale";
+}
+
+function buildArticleId(title = "") {
+  return `${Date.now().toString(36)}-${slugPart(title)}`.slice(0, 54);
+}
+
+function buildArticleHtmlFromDraft(draft, sourceUrl, imageUrl = "") {
+  const title = escHtml(draft?.title || "Yeni məqalə");
+  const lead = escHtml(draft?.lead || "");
+  const sections = Array.isArray(draft?.sections) ? draft.sections : [];
+  const date = new Intl.DateTimeFormat("az-AZ", {
+    day: "2-digit", month: "long", year: "numeric", timeZone: "Asia/Baku"
+  }).format(new Date());
+
+  const media = imageUrl
+    ? `<img src="${escHtml(imageUrl)}" alt="${title}">`
+    : "";
+
+  const body = sections.map(section => {
+    const heading = escHtml(section?.heading || "");
+    const paragraphs = Array.isArray(section?.paragraphs) ? section.paragraphs : [];
+    const h = heading ? `<h2>${heading}</h2>` : "";
+    const p = paragraphs
+      .filter(Boolean)
+      .map(x => `<p>${escHtml(x)}</p>`)
+      .join("\n");
+    return h + p;
+  }).join("\n");
+
+  return `
+  <h1>${title}</h1>
+  <p class="meta">Ramin Nəsirov · ${escHtml(date)}</p>
+  ${media}
+  <p class="lead">${lead}</p>
+  ${body}
+  <p><strong>Mənbə:</strong> <a href="${escHtml(sourceUrl)}">Orijinal material</a></p>
+  `;
+}
+
+async function fetchSourceOgImage(sourceUrl) {
+  try {
+    const r = await fetch(sourceUrl, {
+      headers: { "user-agent": "Mozilla/5.0 NASIROFF-Content-Bot/1.0" },
+      redirect: "follow"
+    });
+    if (!r.ok) return null;
+    const type = r.headers.get("content-type") || "";
+    if (!type.includes("text/html")) return null;
+    const html = (await r.text()).slice(0, 700000);
+    const patterns = [
+      /<meta[^>]+property=["']og:image(?::secure_url)?["'][^>]+content=["']([^"']+)["'][^>]*>/i,
+      /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image(?::secure_url)?["'][^>]*>/i,
+      /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["'][^>]*>/i,
+      /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["'][^>]*>/i
+    ];
+    for (const re of patterns) {
+      const m = html.match(re);
+      if (m?.[1]) return new URL(m[1].replace(/&amp;/g, "&"), sourceUrl).href;
+    }
+  } catch {}
+  return null;
+}
+
+async function cacheRemoteImage(env, origin, imageUrl) {
+  if (!imageUrl) return null;
+  try {
+    const r = await fetch(imageUrl, {
+      headers: { "user-agent": "Mozilla/5.0 NASIROFF-Content-Bot/1.0" },
+      redirect: "follow"
+    });
+    if (!r.ok) return null;
+    const type = r.headers.get("content-type") || "";
+    if (!type.startsWith("image/")) return null;
+    const size = Number(r.headers.get("content-length") || 0);
+    if (size && size > 10 * 1024 * 1024) return null;
+    const bytes = await r.arrayBuffer();
+    if (bytes.byteLength > 10 * 1024 * 1024) return null;
+
+    const stored = await cmsStub(env).fetch("https://cms.internal/media", {
+      method: "POST",
+      headers: { "content-type": type },
+      body: bytes
+    });
+    const data = await stored.json();
+    if (!stored.ok || !data?.ok) return null;
+    return `${origin}/media-store/${encodeURIComponent(data.key)}`;
+  } catch {
+    return null;
+  }
+}
+
+async function geminiDraftFromSource(env, sourceUrl) {
+  if (!env.GEMINI_API_KEY) {
+    throw new Error("GEMINI_API_KEY_missing");
+  }
+
+  const model = env.GEMINI_MODEL || "gemini-3.5-flash";
+  const prompt = `
+Aşağıdakı mənbəni oxu və Azərbaycan dilində redaktə oluna bilən jurnal məqaləsi hazırla:
+${sourceUrl}
+
+Qaydalar:
+- Mənbədə olmayan fakt uydurma.
+- Mətn Azərbaycan dilində sadə, təbii və peşəkar olsun.
+- Brend, şirkət, məhsul, kampaniya, dizayn və texniki terminlərin orijinal adlarını saxla.
+- Sözbəsöz mexaniki tərcümə etmə, mənanı dəqiq qoruyaraq Azərbaycan dilinə uyğunlaşdır.
+- Reklam dili, clickbait və lazımsız şişirtmə olmasın.
+- Başlıq qısa və aydın olsun.
+- lead 2-4 cümləlik giriş olsun.
+- Məzmunu 2-6 məntiqli bölməyə ayır.
+- Hər bölmədə 1-4 qısa paraqraf olsun.
+- Yalnız JSON qaytar.
+`;
+
+  const schema = {
+    type: "OBJECT",
+    properties: {
+      title: { type: "STRING" },
+      lead: { type: "STRING" },
+      sections: {
+        type: "ARRAY",
+        items: {
+          type: "OBJECT",
+          properties: {
+            heading: { type: "STRING" },
+            paragraphs: { type: "ARRAY", items: { type: "STRING" } }
+          },
+          required: ["heading", "paragraphs"]
+        }
+      }
+    },
+    required: ["title", "lead", "sections"]
+  };
+
+  const r = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-goog-api-key": env.GEMINI_API_KEY
+      },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        tools: [{ url_context: {} }],
+        generationConfig: {
+          response_mime_type: "application/json",
+          response_schema: schema,
+          temperature: 0.25
+        }
+      })
+    }
+  );
+
+  const data = await r.json();
+  if (!r.ok) {
+    throw new Error(`Gemini_${r.status}_${data?.error?.message || "error"}`);
+  }
+  const raw = (data?.candidates?.[0]?.content?.parts || [])
+    .map(p => p?.text || "")
+    .join("")
+    .trim();
+  if (!raw) throw new Error("Gemini_empty_response");
+  return JSON.parse(raw);
+}
+
+async function createSourceDraft(env, origin, sourceUrl, userId) {
+  const draft = await geminiDraftFromSource(env, sourceUrl);
+  const articleId = buildArticleId(draft.title);
+  const originalImage = await fetchSourceOgImage(sourceUrl);
+  const cachedImage = await cacheRemoteImage(env, origin, originalImage);
+  const imageUrl = cachedImage || originalImage || "";
+  const html = buildArticleHtmlFromDraft(draft, sourceUrl, imageUrl);
+
+  const record = {
+    id: articleId,
+    slug: articleId,
+    html,
+    mediaKeys: extractMediaKeys(html),
+    sourceUrl,
+    sourceImageUrl: originalImage || null,
+    ownerTelegramId: String(userId),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+  await cmsPutArticle(env, record, articleId);
+  await cmsPutLatestArticleId(env, articleId);
+  return record;
+}
+
 function extractMediaKeys(html) {
   const out = [];
   const re = /\/media-store\/([^"'?\s>]+)/g;
@@ -182,35 +394,56 @@ function cmsStub(env) {
   return env.CMS.get(id);
 }
 
-async function cmsGetArticle(env) {
-  const r = await cmsStub(env).fetch("https://cms.internal/article");
+async function cmsGetArticle(env, articleId = ARTICLE_ID) {
+  const path = articleId === ARTICLE_ID ? "/article" : `/article/${encodeURIComponent(articleId)}`;
+  const r = await cmsStub(env).fetch(`https://cms.internal${path}`);
   if (!r.ok) return null;
   return r.json();
 }
 
-async function cmsPutArticle(env, record) {
-  return cmsStub(env).fetch("https://cms.internal/article", {
+async function cmsPutArticle(env, record, articleId = record?.id || ARTICLE_ID) {
+  const path = articleId === ARTICLE_ID ? "/article" : `/article/${encodeURIComponent(articleId)}`;
+  return cmsStub(env).fetch(`https://cms.internal${path}`, {
     method: "PUT",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(record)
   });
 }
 
+async function cmsGetLatestArticleId(env) {
+  const r = await cmsStub(env).fetch("https://cms.internal/latest-article");
+  if (!r.ok) return ARTICLE_ID;
+  const data = await r.json();
+  return data?.id || ARTICLE_ID;
+}
+
+async function cmsPutLatestArticleId(env, articleId) {
+  return cmsStub(env).fetch("https://cms.internal/latest-article", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id: articleId })
+  });
+}
+
+async function cmsGetOwnerTelegramId(env) {
+  const r = await cmsStub(env).fetch("https://cms.internal/owner");
+  if (!r.ok) return null;
+  const data = await r.json();
+  return data?.userId || null;
+}
+
 async function rememberOwnerTelegramId(env, userId) {
   if (!userId) return;
-  const current = await cmsGetArticle(env) || {};
-  if (String(current.ownerTelegramId || "") === String(userId)) return;
-  await cmsPutArticle(env, {
-    ...current,
-    ownerTelegramId: String(userId),
-    updatedAt: current.updatedAt || new Date().toISOString()
+  await cmsStub(env).fetch("https://cms.internal/owner", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ userId: String(userId) })
   });
 }
 
 async function sendLinkedInExpiryReminder(env) {
   const li = await cmsGetLinkedIn(env);
-  const article = await cmsGetArticle(env);
-  const ownerId = article?.ownerTelegramId;
+  const ownerId = await cmsGetOwnerTelegramId(env);
   if (!li?.expiresAt || !ownerId) return { ok: false, skipped: "missing_connection_or_owner" };
 
   const msLeft = Number(li.expiresAt) - Date.now();
@@ -306,14 +539,42 @@ export class CmsStore {
   async fetch(request) {
     const url = new URL(request.url);
 
-    if (url.pathname === "/article") {
+    if (url.pathname === "/article" || url.pathname.startsWith("/article/")) {
+      const articleId = url.pathname === "/article"
+        ? ARTICLE_ID
+        : decodeURIComponent(url.pathname.slice("/article/".length));
+      const key = articleId === ARTICLE_ID ? "article" : `article:${articleId}`;
       if (request.method === "GET") {
-        const article = await this.ctx.storage.get("article");
+        const article = await this.ctx.storage.get(key);
         return json(article || null);
       }
       if (request.method === "PUT") {
         const article = await request.json();
-        await this.ctx.storage.put("article", article);
+        await this.ctx.storage.put(key, article);
+        return json({ ok: true });
+      }
+    }
+
+    if (url.pathname === "/latest-article") {
+      if (request.method === "GET") {
+        const id = await this.ctx.storage.get("latestArticleId");
+        return json({ id: id || ARTICLE_ID });
+      }
+      if (request.method === "PUT") {
+        const data = await request.json();
+        await this.ctx.storage.put("latestArticleId", data?.id || ARTICLE_ID);
+        return json({ ok: true });
+      }
+    }
+
+    if (url.pathname === "/owner") {
+      if (request.method === "GET") {
+        const data = await this.ctx.storage.get("owner");
+        return json(data || null);
+      }
+      if (request.method === "PUT") {
+        const data = await request.json();
+        await this.ctx.storage.put("owner", data);
         return json({ ok: true });
       }
     }
@@ -604,15 +865,17 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
     }
 
 
-    if (url.pathname === "/api/article/dord-baxis") {
+    const apiArticleMatch = url.pathname.match(/^\/api\/article\/([^/]+)$/);
+    if (apiArticleMatch) {
+      const currentArticleId = decodeURIComponent(apiArticleMatch[1]);
       const userId = url.searchParams.get("u");
       const sig = url.searchParams.get("sig");
-      if (!(await validEditSig(env, ARTICLE_ID, userId, sig))) {
+      if (!(await validEditSig(env, currentArticleId, userId, sig))) {
         return json({ ok: false, error: "unauthorized" }, 401);
       }
 
       if (request.method === "GET") {
-        const saved = await cmsGetArticle(env);
+        const saved = await cmsGetArticle(env, currentArticleId);
         return json({ ok: true, article: saved });
       }
 
@@ -622,28 +885,28 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
           return json({ ok: false, error: "invalid_article" }, 400);
         }
 
-        const old = await cmsGetArticle(env) || {};
+        const old = await cmsGetArticle(env, currentArticleId) || {};
         const newMediaKeys = extractMediaKeys(body.html);
         const oldMediaKeys = Array.isArray(old.mediaKeys) ? old.mediaKeys : [];
         const removed = oldMediaKeys.filter(k => !newMediaKeys.includes(k));
 
         const record = {
           ...old,
-          id: ARTICLE_ID,
-          slug: ARTICLE_ID,
+          id: currentArticleId,
+          slug: currentArticleId,
           html: body.html,
           mediaKeys: newMediaKeys,
           updatedAt: new Date().toISOString()
         };
 
-        const saved = await cmsPutArticle(env, record);
+        const saved = await cmsPutArticle(env, record, currentArticleId);
         if (!saved.ok) return json({ ok: false, error: "save_failed" }, 500);
 
         for (const key of removed) {
           try { await cmsDeleteMedia(env, key); } catch {}
         }
 
-        const articleUrl = `${url.origin}/article/${ARTICLE_ID}`;
+        const articleUrl = `${url.origin}/article/${encodeURIComponent(currentArticleId)}`;
         let telegram = null;
         if (old.mainMessageId) {
           const caption = telegramCaptionFromHtml(body.html, articleUrl);
@@ -679,7 +942,7 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
           } else {
             record.linkedinLastError = linkedin.error || `HTTP ${linkedin.status || "error"}`;
           }
-          await cmsPutArticle(env, record);
+          await cmsPutArticle(env, record, currentArticleId);
         }
 
         return json({
@@ -697,7 +960,8 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
     if (url.pathname === "/api/media") {
       const userId = url.searchParams.get("u");
       const sig = url.searchParams.get("sig");
-      if (!(await validEditSig(env, ARTICLE_ID, userId, sig))) {
+      const mediaArticleId = url.searchParams.get("a") || ARTICLE_ID;
+      if (!(await validEditSig(env, mediaArticleId, userId, sig))) {
         return json({ ok: false, error: "unauthorized" }, 401);
       }
       if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
@@ -746,20 +1010,22 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
         });
       }
 
-      if (url.pathname === "/edit/dord-baxis") {
+      const editMatch = url.pathname.match(/^\/edit\/([^/]+)$/);
+      if (editMatch) {
+        const currentArticleId = decodeURIComponent(editMatch[1]);
         const userId = url.searchParams.get("u");
         const sig = url.searchParams.get("sig");
-        if (!(await validEditSig(env, ARTICLE_ID, userId, sig))) {
+        if (!(await validEditSig(env, currentArticleId, userId, sig))) {
           return new Response("Bu editor linki etibarsızdır.", { status: 401 });
         }
 
-        const initialArticle = await cmsGetArticle(env);
+        const initialArticle = await cmsGetArticle(env, currentArticleId);
         const initialEditorHtml = initialArticle?.html || defaultArticleHtml();
 
-        const articleUrl = `${url.origin}/article/dord-baxis`;
+        const articleUrl = `${url.origin}/article/${encodeURIComponent(currentArticleId)}`;
         const previewUrl = `${articleUrl}?preview=1&u=${encodeURIComponent(userId)}&sig=${encodeURIComponent(sig)}`;
-        const apiUrl = `${url.origin}/api/article/dord-baxis?u=${encodeURIComponent(userId)}&sig=${encodeURIComponent(sig)}`;
-        const mediaApiUrl = `${url.origin}/api/media?u=${encodeURIComponent(userId)}&sig=${encodeURIComponent(sig)}`;
+        const apiUrl = `${url.origin}/api/article/${encodeURIComponent(currentArticleId)}?u=${encodeURIComponent(userId)}&sig=${encodeURIComponent(sig)}`;
+        const mediaApiUrl = `${url.origin}/api/media?a=${encodeURIComponent(currentArticleId)}&u=${encodeURIComponent(userId)}&sig=${encodeURIComponent(sig)}`;
 
         const html = `<!doctype html>
 <html lang="az">
@@ -1339,8 +1605,13 @@ markSaved();
         });
       }
 
-      if (url.pathname === "/article/dord-baxis") {
-        const savedArticle = await cmsGetArticle(env);
+      const publicArticleMatch = url.pathname.match(/^\/article\/([^/]+)$/);
+      if (publicArticleMatch) {
+        const currentArticleId = decodeURIComponent(publicArticleMatch[1]);
+        const savedArticle = await cmsGetArticle(env, currentArticleId);
+        if (!savedArticle && currentArticleId !== ARTICLE_ID) {
+          return new Response("Məqalə tapılmadı.", { status: 404 });
+        }
         const bodyHtml = savedArticle?.html || defaultArticleHtml();
 
         let backHref = "https://t.me/nasiroff_az";
@@ -1348,8 +1619,8 @@ markSaved();
         if (url.searchParams.get("preview") === "1") {
           const previewUserId = url.searchParams.get("u");
           const previewSig = url.searchParams.get("sig");
-          if (await validEditSig(env, ARTICLE_ID, previewUserId, previewSig)) {
-            backHref = `${url.origin}/edit/dord-baxis?u=${encodeURIComponent(previewUserId)}&sig=${encodeURIComponent(previewSig)}`;
+          if (await validEditSig(env, currentArticleId, previewUserId, previewSig)) {
+            backHref = `${url.origin}/edit/${encodeURIComponent(currentArticleId)}?u=${encodeURIComponent(previewUserId)}&sig=${encodeURIComponent(previewSig)}`;
             backLabel = "← Edit rejiminə qayıt";
           }
         }
@@ -1483,15 +1754,16 @@ ${bodyHtml}
       if (text === "/start") {
         await tg(env.BOT_TOKEN, "sendMessage", {
           chat_id: update.message.chat.id,
-          text: "Hazır mətni və ya şəkli mənə göndər. Əvvəl test kanalına göndərəcəyəm. Məqaləni redaktə etmək üçün /edit yaz."
+          text: "Mənə mənbə linki, hazır mətn və ya şəkil göndər. Link göndərsən, mənbəni oxuyub Azərbaycan dilində draft hazırlayacağam və test kanalına göndərəcəyəm. Son draftı açmaq üçün /edit yaz."
         });
         return new Response("ok");
       }
 
       if (text === "/edit") {
         const userId = update.message.from.id;
-        const sig = await makeEditSig(env, ARTICLE_ID, userId);
-        const editUrl = `${url.origin}/edit/dord-baxis?u=${encodeURIComponent(userId)}&sig=${sig}`;
+        const latestArticleId = await cmsGetLatestArticleId(env);
+        const sig = await makeEditSig(env, latestArticleId, userId);
+        const editUrl = `${url.origin}/edit/${encodeURIComponent(latestArticleId)}?u=${encodeURIComponent(userId)}&sig=${sig}`;
         await tg(env.BOT_TOKEN, "sendMessage", {
           chat_id: update.message.chat.id,
           text: "Məqaləni açıb birbaşa səhifənin üzərində redaktə edə bilərsiniz.",
@@ -1499,6 +1771,73 @@ ${bodyHtml}
             inline_keyboard: [[{ text: "✏️ Edit", url: editUrl }]]
           }
         });
+        return new Response("ok");
+      }
+
+      const sourceUrl = firstHttpUrl(text);
+      if (sourceUrl) {
+        await tg(env.BOT_TOKEN, "sendMessage", {
+          chat_id: update.message.chat.id,
+          text: "Mənbəni oxuyuram və Azərbaycan dilində draft hazırlayıram…"
+        });
+
+        try {
+          const record = await createSourceDraft(env, url.origin, sourceUrl, update.message.from.id);
+          const articleId = record.id;
+          const sig = await makeEditSig(env, articleId, update.message.from.id);
+          const editUrl = `${url.origin}/edit/${encodeURIComponent(articleId)}?u=${encodeURIComponent(update.message.from.id)}&sig=${sig}`;
+          const articleUrl = `${url.origin}/article/${encodeURIComponent(articleId)}`;
+          const caption = telegramCaptionFromHtml(record.html, articleUrl);
+          const cover = record.html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] || "";
+
+          const replyMarkup = {
+            inline_keyboard: [
+              [{ text: "✏️ Edit", url: editUrl }],
+              [
+                { text: "✅ Paylaş", callback_data: `publish:${articleId}` },
+                { text: "❌ Yox", callback_data: `reject:${articleId}` }
+              ]
+            ]
+          };
+
+          let posted;
+          if (cover) {
+            posted = await tg(env.BOT_TOKEN, "sendPhoto", {
+              chat_id: env.TEST_CHANNEL,
+              photo: cover,
+              caption,
+              parse_mode: "HTML",
+              reply_markup: replyMarkup
+            });
+          } else {
+            posted = await tg(env.BOT_TOKEN, "sendMessage", {
+              chat_id: env.TEST_CHANNEL,
+              text: caption,
+              parse_mode: "HTML",
+              disable_web_page_preview: false,
+              reply_markup: replyMarkup
+            });
+          }
+          const postedData = await posted.json();
+
+          await tg(env.BOT_TOKEN, "sendMessage", {
+            chat_id: update.message.chat.id,
+            text: postedData.ok
+              ? "Draft hazırdır və test kanalına göndərildi ✅"
+              : "Draft hazırlandı, amma test kanalına göndərmək alınmadı.",
+            reply_markup: {
+              inline_keyboard: [[{ text: "✏️ Draftı aç", url: editUrl }]]
+            }
+          });
+        } catch (e) {
+          const missingKey = String(e?.message || "").includes("GEMINI_API_KEY_missing");
+          await tg(env.BOT_TOKEN, "sendMessage", {
+            chat_id: update.message.chat.id,
+            text: missingKey
+              ? "Gemini API açarı Worker-də yoxdur. GEMINI_API_KEY secret əlavə edilməlidir."
+              : `Mənbəni hazırlamaq alınmadı: ${String(e?.message || e).slice(0, 300)}`
+          });
+        }
         return new Response("ok");
       }
 
@@ -1527,7 +1866,9 @@ ${bodyHtml}
       const q = update.callback_query;
       const msg = q.message;
 
-      if (q.data === "publish") {
+      const publishMatch = String(q.data || "").match(/^publish(?::(.+))?$/);
+      if (publishMatch) {
+        const publishArticleId = publishMatch[1] || ARTICLE_ID;
         const copied = await tg(env.BOT_TOKEN, "copyMessage", {
           chat_id: env.MAIN_CHANNEL,
           from_chat_id: msg.chat.id,
@@ -1548,9 +1889,9 @@ ${bodyHtml}
           });
 
           const publishedMessageId = copiedData.result.message_id;
-          const existing = await cmsGetArticle(env) || {};
+          const existing = await cmsGetArticle(env, publishArticleId) || {};
           const articleHtml = existing.html || defaultArticleHtml();
-          const articleUrl = `${url.origin}/article/${ARTICLE_ID}`;
+          const articleUrl = `${url.origin}/article/${encodeURIComponent(publishArticleId)}`;
 
           let linkedin = null;
           if (!existing.linkedinPostId) {
@@ -1562,8 +1903,8 @@ ${bodyHtml}
 
           const record = {
             ...existing,
-            id: ARTICLE_ID,
-            slug: ARTICLE_ID,
+            id: publishArticleId,
+            slug: publishArticleId,
             html: articleHtml,
             mediaKeys: existing.mediaKeys || [],
             mainMessageId: publishedMessageId,
@@ -1581,7 +1922,7 @@ ${bodyHtml}
             record.linkedinLastError = linkedin.error || `HTTP ${linkedin.status || "error"}`;
           }
 
-          await cmsPutArticle(env, record);
+          await cmsPutArticle(env, record, publishArticleId);
 
           await tg(env.BOT_TOKEN, "copyMessage", {
             chat_id: q.from.id,
@@ -1589,8 +1930,8 @@ ${bodyHtml}
             message_id: publishedMessageId
           });
 
-          const editSig = await makeEditSig(env, ARTICLE_ID, q.from.id);
-          const editUrl = `${url.origin}/edit/dord-baxis?u=${encodeURIComponent(q.from.id)}&sig=${editSig}`;
+          const editSig = await makeEditSig(env, publishArticleId, q.from.id);
+          const editUrl = `${url.origin}/edit/${encodeURIComponent(publishArticleId)}?u=${encodeURIComponent(q.from.id)}&sig=${editSig}`;
 
           const linkedinLine = existing.linkedinPostId
             ? "LinkedIn: əvvəlki post saxlanıldı."
@@ -1610,7 +1951,8 @@ ${bodyHtml}
         return new Response("ok");
       }
 
-      if (q.data === "reject") {
+      const rejectMatch = String(q.data || "").match(/^reject(?::(.+))?$/);
+      if (rejectMatch) {
         await tg(env.BOT_TOKEN, "answerCallbackQuery", {
           callback_query_id: q.id,
           text: "Paylaşım ləğv edildi."
