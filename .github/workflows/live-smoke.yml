@@ -21,7 +21,7 @@ jobs:
           for i in {1..18}; do
             V="$(curl --fail --show-error --silent "https://nasiroff-content-bot.nasirovramin.workers.dev/version" || true)"
             echo "version=$V"
-            if [ "$V" = "long-translation-timeout-fix" ]; then exit 0; fi
+            if [ "$V" = "save-stays-open-draft-update" ]; then exit 0; fi
             sleep 10
           done
           exit 1
