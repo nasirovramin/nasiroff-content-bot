@@ -38,7 +38,7 @@ async function tgSendPhotoFromUrl(token, chatId, photoUrl, caption, replyMarkup)
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "link-only-translate-v9";
+const BUILD_VERSION = "gemini-retry-fallback-v10";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -943,7 +943,11 @@ async function geminiDraftFromSource(env, sourceUrl) {
     throw new Error("GEMINI_API_KEY_missing");
   }
 
-  const model = env.GEMINI_MODEL || "gemini-3.5-flash";
+  const models = [
+    env.GEMINI_MODEL || "gemini-3.5-flash",
+    env.GEMINI_FALLBACK_MODEL || "gemini-2.5-flash"
+  ].filter((x, i, a) => x && a.indexOf(x) === i);
+
   const prompt = `
 Aşağıdakı mənbəni oxu və Azərbaycan dilində redaktə oluna bilən jurnal məqaləsi hazırla:
 ${sourceUrl}
@@ -981,36 +985,53 @@ Qaydalar:
     required: ["title", "lead", "sections"]
   };
 
-  const r = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-    {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-goog-api-key": env.GEMINI_API_KEY
-      },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        tools: [{ url_context: {} }],
-        generationConfig: {
-          response_mime_type: "application/json",
-          response_schema: schema,
-          temperature: 0.25
-        }
-      })
-    }
-  );
+  let lastError = null;
 
-  const data = await r.json();
-  if (!r.ok) {
-    throw new Error(`Gemini_${r.status}_${data?.error?.message || "error"}`);
+  for (const model of models) {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const r = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-goog-api-key": env.GEMINI_API_KEY
+          },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            tools: [{ url_context: {} }],
+            generationConfig: {
+              response_mime_type: "application/json",
+              response_schema: schema,
+              temperature: 0.25
+            }
+          })
+        }
+      );
+
+      const data = await r.json().catch(() => ({}));
+
+      if (r.ok) {
+        const raw = (data?.candidates?.[0]?.content?.parts || [])
+          .map(p => p?.text || "")
+          .join("")
+          .trim();
+        if (!raw) throw new Error("Gemini_empty_response");
+        return JSON.parse(raw);
+      }
+
+      lastError = `Gemini_${r.status}_${data?.error?.message || "error"}`;
+
+      const retryable = r.status === 429 || r.status === 500 || r.status === 502 || r.status === 503 || r.status === 504;
+      if (!retryable) break;
+
+      if (attempt < 3) {
+        await new Promise(resolve => setTimeout(resolve, attempt * 1200));
+      }
+    }
   }
-  const raw = (data?.candidates?.[0]?.content?.parts || [])
-    .map(p => p?.text || "")
-    .join("")
-    .trim();
-  if (!raw) throw new Error("Gemini_empty_response");
-  return JSON.parse(raw);
+
+  throw new Error(lastError || "Gemini_failed");
 }
 
 async function createSourceDraft(env, origin, sourceUrl, userId) {
