@@ -590,6 +590,24 @@ function publicArticleUrl(article, articleId) {
 }
 
 
+function formatAzDate(input = new Date()) {
+  const d = input instanceof Date ? input : new Date(input);
+  const months = [
+    "yanvar","fevral","mart","aprel","may","iyun",
+    "iyul","avqust","sentyabr","oktyabr","noyabr","dekabr"
+  ];
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "Asia/Baku"
+  }).formatToParts(d);
+  const day = parts.find(p => p.type === "day")?.value || "";
+  const month = Number(parts.find(p => p.type === "month")?.value || "1");
+  const year = parts.find(p => p.type === "year")?.value || "";
+  return `${day} ${months[Math.max(0, Math.min(11, month - 1))]} ${year}`;
+}
+
 function removeSourceFooter(html = "") {
   return String(html)
     .replace(/<p>\s*<strong>\s*Mənbə:\s*<\/strong>\s*<a\b[^>]*>\s*Orijinal material\s*<\/a>\s*<\/p>/gi, "")
@@ -623,9 +641,7 @@ function buildArticleHtmlFromDraft(draft, sourceUrl, imageUrl = "") {
   const title = escHtml(draft?.title || "Yeni məqalə");
   const lead = renderDraftText(draft?.lead || "");
   const sections = Array.isArray(draft?.sections) ? draft.sections : [];
-  const date = new Intl.DateTimeFormat("az-AZ", {
-    day: "2-digit", month: "long", year: "numeric", timeZone: "Asia/Baku"
-  }).format(new Date());
+  const date = formatAzDate(new Date());
 
   const media = imageUrl
     ? `<img src="${escHtml(imageUrl)}" alt="${title}">`
@@ -726,12 +742,7 @@ async function fetchSourcePublicationDate(sourceUrl) {
     const chosen = parsed[0];
     return {
       iso: new Date(chosen.time).toISOString(),
-      display: new Intl.DateTimeFormat("az-AZ", {
-        day: "2-digit",
-        month: "long",
-        year: "numeric",
-        timeZone: "Asia/Baku"
-      }).format(new Date(chosen.time))
+      display: formatAzDate(new Date(chosen.time))
     };
   } catch {
     return null;
