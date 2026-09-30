@@ -38,7 +38,7 @@ async function tgSendPhotoFromUrl(token, chatId, photoUrl, caption, replyMarkup)
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "linkedin-image-debug-v6";
+const BUILD_VERSION = "linkedin-internal-media-fix-v7";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -164,6 +164,27 @@ function linkedinMediaUrlsFromHtml(html, origin) {
   return { images: [...new Set(images)], videos: [...new Set(videos)] };
 }
 
+async function linkedinImageSource(env, imageUrl) {
+  try {
+    const u = new URL(imageUrl);
+
+    if (u.pathname.startsWith("/media-store/")) {
+      const key = decodeURIComponent(u.pathname.slice("/media-store/".length));
+      return cmsStub(env).fetch(`https://cms.internal/media/${encodeURIComponent(key)}`);
+    }
+
+    if (u.pathname === "/media/eyes.jpg") {
+      return fetch("https://raw.githubusercontent.com/nasirovramin/nasiroff-content-bot/main.ru/assets/eyes.jpg", {
+        redirect: "follow"
+      });
+    }
+
+    return fetch(imageUrl, { redirect: "follow" });
+  } catch {
+    return fetch(imageUrl, { redirect: "follow" });
+  }
+}
+
 async function linkedinUploadImage(env, imageUrl) {
   const li = await cmsGetLinkedIn(env);
   if (!linkedinConnectionUsable(li)) return { ok:false, error:"linkedin_not_connected_or_expired" };
@@ -179,9 +200,11 @@ async function linkedinUploadImage(env, imageUrl) {
     return { ok:false, error:"linkedin_image_init_failed", status:init.status, detail:JSON.stringify(initData).slice(0,600) };
   }
 
-  const src = await fetch(imageUrl);
-  if (!src.ok) return { ok:false, error:"linkedin_image_source_fetch_failed", status:src.status };
+  const src = await linkedinImageSource(env, imageUrl);
+  if (!src.ok) return { ok:false, error:"linkedin_image_source_fetch_failed", status:src.status, detail:imageUrl };
   const bytes = await src.arrayBuffer();
+  if (!bytes.byteLength) return { ok:false, error:"linkedin_image_source_empty", detail:imageUrl };
+
   const put = await fetch(initData.value.uploadUrl, {
     method: "PUT",
     headers: { "content-type": src.headers.get("content-type") || "application/octet-stream" },
