@@ -38,7 +38,7 @@ async function tgSendPhotoFromUrl(token, chatId, photoUrl, caption, replyMarkup)
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "linkedin-cover-repair-v8";
+const BUILD_VERSION = "link-only-translate-v9";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -2705,7 +2705,7 @@ ${bodyHtml}
       if (text === "/start") {
         await tg(env.BOT_TOKEN, "sendMessage", {
           chat_id: update.message.chat.id,
-          text: "Mənə mənbə linki göndər. Mənbəni skan edib yalnız uyğun dizayn/branding mövzularını seçəcəyəm, hər birini Azərbaycan dilində ayrıca draft hazırlayıb test kanalına göndərəcəyəm. Orada Edit / Paylaş / Yox edə bilərsiniz. Son draftı açmaq üçün /edit yaz."
+          text: "Mənə sadəcə məqalə və ya Telegram post linkini göndər. Mətni Azərbaycan dilinə tərcümə edib draft hazırlayacağam və test kanalına Edit / Paylaş / Yox düymələri ilə göndərəcəyəm. Son draftı açmaq üçün /edit yaz."
         });
         return new Response("ok");
       }
@@ -2729,93 +2729,71 @@ ${bodyHtml}
       if (sourceUrl) {
         await tg(env.BOT_TOKEN, "sendMessage", {
           chat_id: update.message.chat.id,
-          text: "Mənbəni skan edirəm, uyğun mövzuları seçib ayrı-ayrı draftlar hazırlayıram…"
+          text: "Tərcümə edirəm və draft hazırlayıram…"
         });
 
         try {
-          const discovered = await discoverRelevantSourceItems(env, sourceUrl);
-          const fresh = [];
-          for (const item of discovered) {
-            if (!(await cmsIsSourceSeen(env, item.url))) fresh.push(item);
-          }
+          const record = await createSourceDraft(
+            env,
+            url.origin,
+            sourceUrl,
+            update.message.from.id
+          );
 
-          if (!fresh.length) {
-            await tg(env.BOT_TOKEN, "sendMessage", {
-              chat_id: update.message.chat.id,
-              text: discovered.length
-                ? "Bu mənbədə yeni uyğun material tapılmadı. Əvvəl göndərilənlər təkrar paylaşılmadı."
-                : "Bu mənbədə seçdiyimiz mövzulara uyğun material tapılmadı."
+          await cmsPutArticle(env, record, record.id);
+          await cmsPutLatestArticleId(env, record.id);
+
+          const articleId = record.id;
+          const sig = await makeEditSig(env, articleId, update.message.from.id);
+          const editUrl = `${url.origin}/edit/${encodeURIComponent(articleId)}?u=${encodeURIComponent(update.message.from.id)}&sig=${sig}`;
+          const articleUrl = `${url.origin}/article/${encodeURIComponent(articleId)}`;
+          const caption = telegramCaptionFromHtml(record.html, articleUrl);
+          const cover = record.html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] || "";
+
+          const replyMarkup = {
+            inline_keyboard: [
+              [{ text: "✏️ Edit", url: editUrl }],
+              [
+                { text: "✅ Paylaş", callback_data: `publish:${articleId}` },
+                { text: "❌ Yox", callback_data: `reject:${articleId}` }
+              ]
+            ]
+          };
+
+          let postedData;
+          if (cover) {
+            postedData = await tgSendPhotoFromUrl(
+              env.BOT_TOKEN,
+              env.TEST_CHANNEL,
+              new URL(cover, url.origin).href,
+              caption,
+              replyMarkup
+            );
+          } else {
+            const posted = await tg(env.BOT_TOKEN, "sendMessage", {
+              chat_id: env.TEST_CHANNEL,
+              text: caption,
+              parse_mode: "HTML",
+              disable_web_page_preview: false,
+              reply_markup: replyMarkup
             });
-            return new Response("ok");
+            postedData = await posted.json();
           }
 
-          let created = 0;
-          let failed = 0;
-
-          for (const item of fresh.slice(0, 8)) {
-            try {
-              const record = await createSourceDraft(env, url.origin, item.url, update.message.from.id);
-              record.category = item.category || null;
-              await cmsPutArticle(env, record, record.id);
-
-              const articleId = record.id;
-              const sig = await makeEditSig(env, articleId, update.message.from.id);
-              const editUrl = `${url.origin}/edit/${encodeURIComponent(articleId)}?u=${encodeURIComponent(update.message.from.id)}&sig=${sig}`;
-              const articleUrl = `${url.origin}/article/${encodeURIComponent(articleId)}`;
-              const caption = telegramCaptionFromHtml(record.html, articleUrl);
-              const cover = record.html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] || "";
-              const categoryLabel = item.category ? `#${item.category}\n\n` : "";
-              const dateLabel = record.sourcePublishedDisplay
-                ? `📅 Mənbədə son paylaşım tarixi: ${record.sourcePublishedDisplay}\n\n`
-                : "📅 Mənbədə paylaşım tarixi göstərilməyib\n\n";
-              const finalCaption = `${categoryLabel}${dateLabel}${caption}`;
-
-              const replyMarkup = {
-                inline_keyboard: [
-                  [{ text: "✏️ Edit", url: editUrl }],
-                  [
-                    { text: "✅ Paylaş", callback_data: `publish:${articleId}` },
-                    { text: "❌ Yox", callback_data: `reject:${articleId}` }
-                  ]
-                ]
-              };
-
-              let postedData;
-              if (cover) {
-                postedData = await tgSendPhotoFromUrl(
-                  env.BOT_TOKEN,
-                  env.TEST_CHANNEL,
-                  new URL(cover, url.origin).href,
-                  finalCaption,
-                  replyMarkup
-                );
-              } else {
-                const posted = await tg(env.BOT_TOKEN, "sendMessage", {
-                  chat_id: env.TEST_CHANNEL,
-                  text: finalCaption,
-                  parse_mode: "HTML",
-                  disable_web_page_preview: false,
-                  reply_markup: replyMarkup
-                });
-                postedData = await posted.json();
-              }
-              if (postedData.ok) {
-                record.testMessageId = postedData.result.message_id;
-                record.testMessageType = cover ? "media" : "text";
-                await cmsPutArticle(env, record, articleId);
-                await cmsMarkSourceSeen(env, item.url, articleId);
-                created++;
-              } else {
-                failed++;
-              }
-            } catch {
-              failed++;
-            }
+          if (!postedData.ok) {
+            throw new Error(
+              `test_send_failed: ${postedData.description || postedData.error || "unknown"}`
+            );
           }
+
+          record.testMessageId = postedData.result.message_id;
+          record.testMessageType = cover ? "media" : "text";
+          record.approvalStatus = "pending";
+          await cmsPutArticle(env, record, articleId);
 
           await tg(env.BOT_TOKEN, "sendMessage", {
             chat_id: update.message.chat.id,
-            text: `Mənbə yoxlanıldı ✅\nUyğun yeni draft: ${created}${failed ? `\nHazırlanmayan: ${failed}` : ""}\nHər draft test kanalında ayrıca Edit / Paylaş / Yox ilə göndərildi.`
+            text: "Tərcümə hazırdır ✅ Test kanalına göndərdim."
           });
         } catch (e) {
           const missingKey = String(e?.message || "").includes("GEMINI_API_KEY_missing");
@@ -2823,29 +2801,15 @@ ${bodyHtml}
             chat_id: update.message.chat.id,
             text: missingKey
               ? "Gemini API açarı Worker-də yoxdur. GEMINI_API_KEY Secret əlavə edilməlidir."
-              : `Mənbəni yoxlamaq alınmadı: ${String(e?.message || e).slice(0, 300)}`
+              : `Tərcümə etmək alınmadı: ${String(e?.message || e).slice(0, 300)}`
           });
         }
         return new Response("ok");
       }
 
-      const testPost = await tg(env.BOT_TOKEN, "sendMessage", {
-        chat_id: env.TEST_CHANNEL,
-        text,
-        parse_mode: "HTML",
-        disable_web_page_preview: false,
-        reply_markup: {
-          inline_keyboard: [[
-            { text: "✅ Paylaş", callback_data: "publish" },
-            { text: "❌ Yox", callback_data: "reject" }
-          ]]
-        }
-      });
-
-      const data = await testPost.json();
       await tg(env.BOT_TOKEN, "sendMessage", {
         chat_id: update.message.chat.id,
-        text: data.ok ? "Test kanalına göndərildi." : "Test kanalına göndərmək alınmadı."
+        text: "Mənə yalnız link göndər. Linkdəki məzmunu tərcümə edib test kanalına hazırlayacağam."
       });
       return new Response("ok");
     }
