@@ -38,7 +38,7 @@ async function tgSendPhotoFromUrl(token, chatId, photoUrl, caption, replyMarkup)
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "linkedin-post-confirmation-link";
+const BUILD_VERSION = "async-fast-translation-fix";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -942,6 +942,42 @@ ${compact.map((x,i)=>`${i+1}. [${x.title}] ${x.url}${x.publishedAt ? ` | tarix: 
     .slice(0, 8);
 }
 
+
+async function fetchReadableSourceText(sourceUrl) {
+  try {
+    const r = await fetch(sourceUrl, {
+      headers: {
+        "user-agent": "Mozilla/5.0 NASIROFF-Content-Bot/1.0",
+        "accept": "text/html,application/xhtml+xml"
+      },
+      redirect: "follow"
+    });
+    if (!r.ok) return "";
+    const type = r.headers.get("content-type") || "";
+    if (!type.includes("text/html")) return "";
+
+    let html = await r.text();
+    html = html
+      .replace(/<script\b[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style\b[\s\S]*?<\/style>/gi, " ")
+      .replace(/<svg\b[\s\S]*?<\/svg>/gi, " ")
+      .replace(/<nav\b[\s\S]*?<\/nav>/gi, " ")
+      .replace(/<footer\b[\s\S]*?<\/footer>/gi, " ")
+      .replace(/<form\b[\s\S]*?<\/form>/gi, " ");
+
+    const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    const title = titleMatch ? cleanText(titleMatch[1]) : "";
+    const text = cleanText(html)
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 42000);
+
+    return [title, text].filter(Boolean).join("\n\n");
+  } catch {
+    return "";
+  }
+}
+
 async function geminiDraftFromSource(env, sourceUrl) {
   if (!env.GEMINI_CONTENT_API_KEY) {
     throw new Error("GEMINI_CONTENT_API_KEY_missing");
@@ -958,11 +994,12 @@ async function geminiDraftFromSource(env, sourceUrl) {
     "gemini-3-flash-preview"
   ].filter((x, i, a) => x && a.indexOf(x) === i);
 
+  const readableSource = await fetchReadableSourceText(sourceUrl);
   const prompt = `
-Aşağıdakı mənbəni oxu və Azərbaycan dilində redaktə oluna bilən jurnal məqaləsi hazırla:
-${sourceUrl}
+Aşağıdakı mənbəni Azərbaycan dilində redaktə oluna bilən jurnal məqaləsinə çevir.
+Mənbə URL: ${sourceUrl}
 
-Qaydalar:
+${readableSource ? `MƏNBƏNİN MƏTNİ:\n${readableSource}\n\n` : ""}Qaydalar:
 - Mənbədə olmayan fakt uydurma.
 - Mətn Azərbaycan dilində sadə, təbii və peşəkar olsun.
 - Brend, şirkət, məhsul, kampaniya, dizayn və texniki terminlərin orijinal adlarını saxla.
@@ -1009,7 +1046,7 @@ Qaydalar:
           },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
-            tools: [{ url_context: {} }],
+            ...(readableSource ? {} : { tools: [{ url_context: {} }] }),
             generationConfig: {
               response_mime_type: "application/json",
               response_schema: schema,
@@ -1070,6 +1107,76 @@ async function createSourceDraft(env, origin, sourceUrl, userId) {
   await cmsPutArticle(env, record, articleId);
   await cmsPutLatestArticleId(env, articleId);
   return record;
+}
+
+
+async function processSourceDraftMessage(env, origin, sourceUrl, userId, chatId) {
+  try {
+    const record = await createSourceDraft(env, origin, sourceUrl, userId);
+
+    await cmsPutArticle(env, record, record.id);
+    await cmsPutLatestArticleId(env, record.id);
+
+    const articleId = record.id;
+    const sig = await makeEditSig(env, articleId, userId);
+    const editUrl = `${origin}/edit/${encodeURIComponent(articleId)}?u=${encodeURIComponent(userId)}&sig=${sig}`;
+    const articleUrl = `${origin}/article/${encodeURIComponent(articleId)}`;
+    const caption = telegramCaptionFromHtml(record.html, articleUrl);
+    const cover = record.html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] || "";
+
+    const replyMarkup = {
+      inline_keyboard: [
+        [{ text: "✏️ Edit", url: editUrl }],
+        [
+          { text: "✅ Paylaş", callback_data: `publish:${articleId}` },
+          { text: "❌ Yox", callback_data: `reject:${articleId}` }
+        ]
+      ]
+    };
+
+    let postedData;
+    if (cover) {
+      postedData = await tgSendPhotoFromUrl(
+        env.BOT_TOKEN,
+        env.TEST_CHANNEL,
+        new URL(cover, origin).href,
+        caption,
+        replyMarkup
+      );
+    } else {
+      const posted = await tg(env.BOT_TOKEN, "sendMessage", {
+        chat_id: env.TEST_CHANNEL,
+        text: caption,
+        parse_mode: "HTML",
+        disable_web_page_preview: false,
+        reply_markup: replyMarkup
+      });
+      postedData = await posted.json();
+    }
+
+    if (!postedData.ok) {
+      throw new Error(`test_send_failed: ${postedData.description || postedData.error || "unknown"}`);
+    }
+
+    record.testMessageId = postedData.result.message_id;
+    record.testMessageType = cover ? "media" : "text";
+    record.approvalStatus = "pending";
+    await cmsPutArticle(env, record, articleId);
+
+    await tg(env.BOT_TOKEN, "sendMessage", {
+      chat_id: chatId,
+      text: "Tərcümə hazırdır ✅ Test kanalına göndərdim."
+    });
+  } catch (e) {
+    const msg = String(e?.message || e);
+    const missingKey = msg.includes("GEMINI_CONTENT_API_KEY_missing");
+    await tg(env.BOT_TOKEN, "sendMessage", {
+      chat_id: chatId,
+      text: missingKey
+        ? "Bu bot üçün Gemini API açarı yoxdur. GEMINI_CONTENT_API_KEY Secret əlavə edilməlidir."
+        : `Tərcümə etmək alınmadı: ${msg.slice(0, 300)}`
+    });
+  }
 }
 
 function extractMediaKeys(html) {
@@ -1432,7 +1539,7 @@ export default {
     ctx.waitUntil(sendLinkedInExpiryReminder(env));
   },
 
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const imageSource = "https://raw.githubusercontent.com/nasirovramin/nasiroff-content-bot/main.ru/assets/eyes.jpg";
 
@@ -2729,78 +2836,17 @@ ${bodyHtml}
           text: "Tərcümə edirəm və draft hazırlayıram…"
         });
 
-        try {
-          const record = await createSourceDraft(
-            env,
-            url.origin,
-            sourceUrl,
-            update.message.from.id
-          );
+        const task = processSourceDraftMessage(
+          env,
+          url.origin,
+          sourceUrl,
+          update.message.from.id,
+          update.message.chat.id
+        );
 
-          await cmsPutArticle(env, record, record.id);
-          await cmsPutLatestArticleId(env, record.id);
+        if (ctx?.waitUntil) ctx.waitUntil(task);
+        else await task;
 
-          const articleId = record.id;
-          const sig = await makeEditSig(env, articleId, update.message.from.id);
-          const editUrl = `${url.origin}/edit/${encodeURIComponent(articleId)}?u=${encodeURIComponent(update.message.from.id)}&sig=${sig}`;
-          const articleUrl = `${url.origin}/article/${encodeURIComponent(articleId)}`;
-          const caption = telegramCaptionFromHtml(record.html, articleUrl);
-          const cover = record.html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] || "";
-
-          const replyMarkup = {
-            inline_keyboard: [
-              [{ text: "✏️ Edit", url: editUrl }],
-              [
-                { text: "✅ Paylaş", callback_data: `publish:${articleId}` },
-                { text: "❌ Yox", callback_data: `reject:${articleId}` }
-              ]
-            ]
-          };
-
-          let postedData;
-          if (cover) {
-            postedData = await tgSendPhotoFromUrl(
-              env.BOT_TOKEN,
-              env.TEST_CHANNEL,
-              new URL(cover, url.origin).href,
-              caption,
-              replyMarkup
-            );
-          } else {
-            const posted = await tg(env.BOT_TOKEN, "sendMessage", {
-              chat_id: env.TEST_CHANNEL,
-              text: caption,
-              parse_mode: "HTML",
-              disable_web_page_preview: false,
-              reply_markup: replyMarkup
-            });
-            postedData = await posted.json();
-          }
-
-          if (!postedData.ok) {
-            throw new Error(
-              `test_send_failed: ${postedData.description || postedData.error || "unknown"}`
-            );
-          }
-
-          record.testMessageId = postedData.result.message_id;
-          record.testMessageType = cover ? "media" : "text";
-          record.approvalStatus = "pending";
-          await cmsPutArticle(env, record, articleId);
-
-          await tg(env.BOT_TOKEN, "sendMessage", {
-            chat_id: update.message.chat.id,
-            text: "Tərcümə hazırdır ✅ Test kanalına göndərdim."
-          });
-        } catch (e) {
-          const missingKey = String(e?.message || "").includes("GEMINI_CONTENT_API_KEY_missing");
-          await tg(env.BOT_TOKEN, "sendMessage", {
-            chat_id: update.message.chat.id,
-            text: missingKey
-              ? "Bu bot üçün ayrıca Gemini API açarı yoxdur. GEMINI_CONTENT_API_KEY Secret əlavə edilməlidir."
-              : `Tərcümə etmək alınmadı: ${String(e?.message || e).slice(0, 300)}`
-          });
-        }
         return new Response("ok");
       }
 
