@@ -38,7 +38,7 @@ async function tgSendPhotoFromUrl(token, chatId, photoUrl, caption, replyMarkup)
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "translation-timeout-fallback-fix";
+const BUILD_VERSION = "photo-fallback-translation-fix";
 const enc = new TextEncoder();
 const timeoutSignal = (ms) => AbortSignal.timeout(ms);
 
@@ -1085,7 +1085,7 @@ async function createSourceDraft(env, origin, sourceUrl, userId) {
     fetchSourcePublicationDate(sourceUrl)
   ]);
   const cachedImage = await cacheRemoteImage(env, origin, originalImage);
-  const imageUrl = cachedImage || originalImage || "";
+  const imageUrl = cachedImage || "";
   const html = buildArticleHtmlFromDraft(draft, sourceUrl, imageUrl);
 
   const record = {
@@ -1132,6 +1132,8 @@ async function processSourceDraftMessage(env, origin, sourceUrl, userId, chatId)
     };
 
     let postedData;
+    let sentAsMedia = false;
+
     if (cover) {
       postedData = await tgSendPhotoFromUrl(
         env.BOT_TOKEN,
@@ -1140,7 +1142,10 @@ async function processSourceDraftMessage(env, origin, sourceUrl, userId, chatId)
         caption,
         replyMarkup
       );
-    } else {
+      sentAsMedia = !!postedData?.ok;
+    }
+
+    if (!postedData?.ok) {
       const posted = await tg(env.BOT_TOKEN, "sendMessage", {
         chat_id: env.TEST_CHANNEL,
         text: caption,
@@ -1149,6 +1154,7 @@ async function processSourceDraftMessage(env, origin, sourceUrl, userId, chatId)
         reply_markup: replyMarkup
       });
       postedData = await posted.json();
+      sentAsMedia = false;
     }
 
     if (!postedData.ok) {
@@ -1156,7 +1162,7 @@ async function processSourceDraftMessage(env, origin, sourceUrl, userId, chatId)
     }
 
     record.testMessageId = postedData.result.message_id;
-    record.testMessageType = cover ? "media" : "text";
+    record.testMessageType = sentAsMedia ? "media" : "text";
     record.approvalStatus = "pending";
     await cmsPutArticle(env, record, articleId);
 
@@ -2669,6 +2675,7 @@ ${bodyHtml}
       }
 
       let data;
+      let sentAsMedia = false;
       if (cover) {
         data = await tgSendPhotoFromUrl(
           env.BOT_TOKEN,
@@ -2677,7 +2684,9 @@ ${bodyHtml}
           caption,
           replyMarkup
         );
-      } else {
+        sentAsMedia = !!data?.ok;
+      }
+      if (!data?.ok) {
         const sent = await tg(env.BOT_TOKEN, "sendMessage", {
           chat_id: env.TEST_CHANNEL,
           text: caption,
@@ -2686,13 +2695,14 @@ ${bodyHtml}
           reply_markup: replyMarkup
         });
         data = await sent.json();
+        sentAsMedia = false;
       }
       if (!data.ok) return json({ ok: false, telegram: data }, 502);
 
       await cmsPutArticle(env, {
         ...article,
         testMessageId: data.result.message_id,
-        testMessageType: cover ? "media" : "text",
+        testMessageType: sentAsMedia ? "media" : "text",
         approvalStatus: "pending",
         updatedAt: new Date().toISOString()
       }, latestArticleId);
