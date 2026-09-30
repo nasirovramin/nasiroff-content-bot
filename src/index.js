@@ -38,7 +38,7 @@ async function tgSendPhotoFromUrl(token, chatId, photoUrl, caption, replyMarkup)
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "gemini-multi-health-v14";
+const BUILD_VERSION = "linkedin-post-confirmation-link";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -465,6 +465,11 @@ function linkedinConnectionUsable(li) {
   if (!li?.accessToken || !li?.profile?.sub) return false;
   if (li.expiresAt && Date.now() >= Number(li.expiresAt) - 60_000) return false;
   return true;
+}
+
+function linkedinPostUrl(postId) {
+  if (!postId) return null;
+  return `https://www.linkedin.com/feed/update/${encodeURI(postId)}/`;
 }
 
 async function linkedinCreateTextPost(env, commentary) {
@@ -1544,80 +1549,6 @@ export default {
           "content-type": "text/html; charset=utf-8",
           "cache-control": "no-store"
         }
-      });
-    }
-
-    if (url.pathname === "/retry-linkedin-latest-6a2f91") {
-      const latestArticleId = await cmsGetLatestArticleId(env);
-      let article = await cmsGetArticle(env, latestArticleId);
-      if (!article?.html) return json({ ok:false, error:"latest_article_missing" }, 404);
-      if (article.linkedinPostId) {
-        return json({ ok:true, skipped:"already_published", postId:article.linkedinPostId });
-      }
-
-      article = await repairBrokenArticleCover(env, article, latestArticleId, url.origin);
-
-      const articleUrl = `${url.origin}/article/${encodeURIComponent(latestArticleId)}`;
-      const linkedin = await linkedinCreateNativePostFromHtml(
-        env,
-        article.html,
-        url.origin,
-        articleUrl
-      );
-
-      const updated = { ...article, updatedAt:new Date().toISOString() };
-      if (linkedin?.ok) {
-        updated.linkedinPostId = linkedin.postId;
-        updated.linkedinPublishedAt = new Date().toISOString();
-        updated.linkedinLastSyncAt = new Date().toISOString();
-        updated.linkedinLastError = null;
-      } else {
-        updated.linkedinLastError = [
-          linkedin?.error || `HTTP ${linkedin?.status || "error"}`,
-          linkedin?.detail || null,
-          linkedin?.status ? `status=${linkedin.status}` : null
-        ].filter(Boolean).join(" | ").slice(0, 1400);
-      }
-      await cmsPutArticle(env, updated, latestArticleId);
-
-      return json({
-        ok: !!linkedin?.ok,
-        articleId: latestArticleId,
-        linkedin
-      }, linkedin?.ok ? 200 : 502);
-    }
-
-    if (url.pathname === "/debug/linkedin-latest-4c8e7a") {
-      const li = await cmsGetLinkedIn(env);
-      const latestArticleId = await cmsGetLatestArticleId(env);
-      const article = await cmsGetArticle(env, latestArticleId);
-      const media = article?.html ? linkedinMediaUrlsFromHtml(article.html, url.origin) : { images: [], videos: [] };
-      let firstImageStatus = null;
-      let firstImageType = null;
-      if (media.images[0]) {
-        try {
-          const r = await fetch(media.images[0], { redirect: "follow" });
-          firstImageStatus = r.status;
-          firstImageType = r.headers.get("content-type") || null;
-        } catch (e) {
-          firstImageStatus = "fetch_error";
-        }
-      }
-      return json({
-        connected: !!li?.accessToken,
-        usable: linkedinConnectionUsable(li),
-        scope: li?.scope || null,
-        expiresAt: li?.expiresAt || null,
-        profileSubPresent: !!li?.profile?.sub,
-        latestArticleId,
-        title: article?.html ? (extractFirst(article.html, "h1") || null) : null,
-        imageCount: media.images.length,
-        imageUrls: media.images,
-        firstImageStatus,
-        firstImageType,
-        videoCount: media.videos.length,
-        linkedinPostId: article?.linkedinPostId || null,
-        linkedinLastError: article?.linkedinLastError || null
       });
     }
 
@@ -2936,9 +2867,12 @@ ${bodyHtml}
 
           if (linkedin?.ok) {
             record.linkedinPostId = linkedin.postId;
+            record.linkedinPostUrl = linkedinPostUrl(linkedin.postId);
             record.linkedinPublishedAt = new Date().toISOString();
             record.linkedinLastSyncAt = new Date().toISOString();
             record.linkedinLastError = null;
+          } else if (existing.linkedinPostId) {
+            record.linkedinPostUrl = existing.linkedinPostUrl || linkedinPostUrl(existing.linkedinPostId);
           } else if (linkedin && !linkedin.ok) {
             record.linkedinLastError = [
               linkedin.error || `HTTP ${linkedin.status || "error"}`,
@@ -2964,11 +2898,15 @@ ${bodyHtml}
               ? "LinkedIn: paylaşıldı ✅"
               : `LinkedIn: paylaşılmadı ⚠️\nSəbəb: ${(record.linkedinLastError || "naməlum xəta").slice(0, 320)}`;
 
+          const actionButtons = [{ text: "✏️ Edit", url: editUrl }];
+          const linkedInUrl = record.linkedinPostUrl || linkedinPostUrl(record.linkedinPostId);
+          if (linkedInUrl) actionButtons.push({ text: "🔗 LinkedIn-də bax", url: linkedInUrl });
+
           await tg(env.BOT_TOKEN, "sendMessage", {
             chat_id: q.from.id,
             text: `✅ Telegram-da paylaşıldı.\n${linkedinLine}\nPost ID: ${publishedMessageId}`,
             reply_markup: {
-              inline_keyboard: [[{ text: "✏️ Edit", url: editUrl }]]
+              inline_keyboard: [actionButtons]
             }
           });
         }
