@@ -38,7 +38,7 @@ async function tgSendPhotoFromUrl(token, chatId, photoUrl, caption, replyMarkup)
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "telegram-photo-upload-v3";
+const BUILD_VERSION = "linkedin-debug-v4";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -1442,6 +1442,26 @@ export default {
       });
     }
 
+    if (url.pathname === "/debug/linkedin-latest-4c8e7a") {
+      const li = await cmsGetLinkedIn(env);
+      const latestArticleId = await cmsGetLatestArticleId(env);
+      const article = await cmsGetArticle(env, latestArticleId);
+      const media = article?.html ? linkedinMediaUrlsFromHtml(article.html, url.origin) : { images: [], videos: [] };
+      return json({
+        connected: !!li?.accessToken,
+        usable: linkedinConnectionUsable(li),
+        scope: li?.scope || null,
+        expiresAt: li?.expiresAt || null,
+        profileSubPresent: !!li?.profile?.sub,
+        latestArticleId,
+        title: article?.html ? (extractFirst(article.html, "h1") || null) : null,
+        imageCount: media.images.length,
+        videoCount: media.videos.length,
+        linkedinPostId: article?.linkedinPostId || null,
+        linkedinLastError: article?.linkedinLastError || null
+      });
+    }
+
     if (url.pathname === "/linkedin/status") {
       const li = await cmsGetLinkedIn(env);
       if (!li?.accessToken) return json({ connected: false });
@@ -2765,7 +2785,11 @@ ${bodyHtml}
             record.linkedinLastSyncAt = new Date().toISOString();
             record.linkedinLastError = null;
           } else if (linkedin && !linkedin.ok) {
-            record.linkedinLastError = linkedin.error || `HTTP ${linkedin.status || "error"}`;
+            record.linkedinLastError = [
+              linkedin.error || `HTTP ${linkedin.status || "error"}`,
+              linkedin.detail || null,
+              linkedin.status ? `status=${linkedin.status}` : null
+            ].filter(Boolean).join(" | ").slice(0, 1400);
           }
 
           await cmsPutArticle(env, record, publishArticleId);
@@ -2783,7 +2807,7 @@ ${bodyHtml}
             ? "LinkedIn: əvvəlki post saxlanıldı."
             : linkedin?.ok
               ? "LinkedIn: paylaşıldı ✅"
-              : "LinkedIn: paylaşılmadı ⚠️";
+              : `LinkedIn: paylaşılmadı ⚠️\nSəbəb: ${(record.linkedinLastError || "naməlum xəta").slice(0, 320)}`;
 
           await tg(env.BOT_TOKEN, "sendMessage", {
             chat_id: q.from.id,
