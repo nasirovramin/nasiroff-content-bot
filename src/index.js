@@ -80,11 +80,192 @@ function telegramCaptionFromHtml(html, articleUrl) {
   return `<b>${title}</b>\n\n${shortLead}\n\n<a href="${articleUrl}">Ətraflı oxu</a>`;
 }
 
-function linkedinCommentaryFromHtml(html, articleUrl) {
-  const title = extractFirst(html, "h1") || ARTICLE_TITLE;
-  const lead = extractFirst(html, "p", "lead");
-  const shortLead = lead.length > 900 ? lead.slice(0, 897).trimEnd() + "..." : lead;
-  return `${title}\n\n${shortLead}\n\nƏtraflı oxu: ${articleUrl}`;
+function linkedinCommentaryFromHtml(html) {
+  const blocks = [];
+  const re = /<(h1|h2|h3|p|blockquote|li)\b([^>]*)>([\s\S]*?)<\/\1>/gi;
+  let m;
+  while ((m = re.exec(html))) {
+    const tag = m[1].toLowerCase();
+    const attrs = m[2] || "";
+    if (/class=["'][^"']*meta[^"']*["']/i.test(attrs)) continue;
+    const text = cleanText(m[3]);
+    if (!text) continue;
+    if (/^Mənbə\s*:/i.test(text)) continue;
+    if (tag === "li") blocks.push("• " + text);
+    else blocks.push(text);
+  }
+  return blocks.join("\n\n").trim();
+}
+
+function linkedinMediaUrlsFromHtml(html, origin) {
+  const images = [];
+  const videos = [];
+  const imgRe = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi;
+  const videoRe = /<video[^>]+src=["']([^"']+)["'][^>]*>|<video[^>]*>[\s\S]*?<source[^>]+src=["']([^"']+)["'][^>]*>[\s\S]*?<\/video>/gi;
+  let m;
+  while ((m = imgRe.exec(html))) {
+    try { images.push(new URL(m[1], origin).href); } catch {}
+  }
+  while ((m = videoRe.exec(html))) {
+    const src = m[1] || m[2];
+    try { videos.push(new URL(src, origin).href); } catch {}
+  }
+  return { images: [...new Set(images)], videos: [...new Set(videos)] };
+}
+
+async function linkedinUploadImage(env, imageUrl) {
+  const li = await cmsGetLinkedIn(env);
+  if (!linkedinConnectionUsable(li)) return { ok:false, error:"linkedin_not_connected_or_expired" };
+  const owner = `urn:li:person:${li.profile.sub}`;
+
+  const init = await fetch("https://api.linkedin.com/rest/images?action=initializeUpload", {
+    method: "POST",
+    headers: linkedinApiHeaders(li.accessToken),
+    body: JSON.stringify({ initializeUploadRequest: { owner } })
+  });
+  const initData = await init.json().catch(()=>({}));
+  if (!init.ok || !initData?.value?.uploadUrl || !initData?.value?.image) {
+    return { ok:false, error:"linkedin_image_init_failed", status:init.status, detail:JSON.stringify(initData).slice(0,600) };
+  }
+
+  const src = await fetch(imageUrl);
+  if (!src.ok) return { ok:false, error:"linkedin_image_source_fetch_failed", status:src.status };
+  const bytes = await src.arrayBuffer();
+  const put = await fetch(initData.value.uploadUrl, {
+    method: "PUT",
+    headers: { "content-type": src.headers.get("content-type") || "application/octet-stream" },
+    body: bytes
+  });
+  if (!put.ok) return { ok:false, error:"linkedin_image_upload_failed", status:put.status, detail:(await put.text()).slice(0,500) };
+  return { ok:true, urn:initData.value.image };
+}
+
+async function linkedinUploadVideo(env, videoUrl) {
+  const li = await cmsGetLinkedIn(env);
+  if (!linkedinConnectionUsable(li)) return { ok:false, error:"linkedin_not_connected_or_expired" };
+  const owner = `urn:li:person:${li.profile.sub}`;
+
+  const src = await fetch(videoUrl);
+  if (!src.ok) return { ok:false, error:"linkedin_video_source_fetch_failed", status:src.status };
+  const bytes = new Uint8Array(await src.arrayBuffer());
+
+  const init = await fetch("https://api.linkedin.com/rest/videos?action=initializeUpload", {
+    method: "POST",
+    headers: linkedinApiHeaders(li.accessToken),
+    body: JSON.stringify({
+      initializeUploadRequest: {
+        owner,
+        fileSizeBytes: bytes.byteLength,
+        uploadCaptions: false,
+        uploadThumbnail: false
+      }
+    })
+  });
+  const initData = await init.json().catch(()=>({}));
+  const value = initData?.value;
+  if (!init.ok || !value?.video || !Array.isArray(value?.uploadInstructions)) {
+    return { ok:false, error:"linkedin_video_init_failed", status:init.status, detail:JSON.stringify(initData).slice(0,600) };
+  }
+
+  const uploadedPartIds = [];
+  for (const part of value.uploadInstructions) {
+    const first = Number(part.firstByte);
+    const last = Number(part.lastByte);
+    const chunk = bytes.slice(first, last + 1);
+    const put = await fetch(part.uploadUrl, {
+      method: "PUT",
+      headers: { "content-type": "application/octet-stream" },
+      body: chunk
+    });
+    if (!put.ok) {
+      return { ok:false, error:"linkedin_video_upload_failed", status:put.status, detail:(await put.text()).slice(0,500) };
+    }
+    const etag = (put.headers.get("etag") || "").replace(/^"|"$/g, "");
+    if (!etag) return { ok:false, error:"linkedin_video_etag_missing" };
+    uploadedPartIds.push(etag);
+  }
+
+  const fin = await fetch("https://api.linkedin.com/rest/videos?action=finalizeUpload", {
+    method: "POST",
+    headers: linkedinApiHeaders(li.accessToken),
+    body: JSON.stringify({
+      finalizeUploadRequest: {
+        video: value.video,
+        uploadToken: value.uploadToken || "",
+        uploadedPartIds
+      }
+    })
+  });
+  if (!fin.ok) return { ok:false, error:"linkedin_video_finalize_failed", status:fin.status, detail:(await fin.text()).slice(0,500) };
+  return { ok:true, urn:value.video };
+}
+
+async function linkedinCreateNativePostFromHtml(env, html, origin) {
+  const li = await cmsGetLinkedIn(env);
+  if (!linkedinConnectionUsable(li)) {
+    return { ok:false, error:"linkedin_not_connected_or_expired" };
+  }
+
+  const commentary = linkedinCommentaryFromHtml(html);
+  const media = linkedinMediaUrlsFromHtml(html, origin);
+  const author = `urn:li:person:${li.profile.sub}`;
+
+  const payload = {
+    author,
+    commentary,
+    visibility: "PUBLIC",
+    distribution: {
+      feedDistribution: "MAIN_FEED",
+      targetEntities: [],
+      thirdPartyDistributionChannels: []
+    },
+    lifecycleState: "PUBLISHED",
+    isReshareDisabledByAuthor: false
+  };
+
+  if (media.videos.length && media.images.length) {
+    return { ok:false, error:"linkedin_mixed_media_not_supported_in_single_post" };
+  }
+
+  if (media.videos.length) {
+    const up = await linkedinUploadVideo(env, media.videos[0]);
+    if (!up.ok) return up;
+    payload.content = { media: { id: up.urn, title: extractFirst(html, "h1") || ARTICLE_TITLE } };
+  } else if (media.images.length) {
+    const uploaded = [];
+    for (const imageUrl of media.images.slice(0,20)) {
+      const up = await linkedinUploadImage(env, imageUrl);
+      if (!up.ok) return up;
+      uploaded.push(up.urn);
+    }
+    if (uploaded.length === 1) {
+      payload.content = { media: { id: uploaded[0], altText: extractFirst(html, "h1") || ARTICLE_TITLE } };
+    } else if (uploaded.length > 1) {
+      payload.content = {
+        multiImage: {
+          images: uploaded.map((id, i) => ({
+            id,
+            altText: i === 0 ? (extractFirst(html, "h1") || ARTICLE_TITLE) : ""
+          }))
+        }
+      };
+    }
+  }
+
+  const r = await fetch("https://api.linkedin.com/rest/posts", {
+    method: "POST",
+    headers: linkedinApiHeaders(li.accessToken),
+    body: JSON.stringify(payload)
+  });
+  const postId = r.headers.get("x-restli-id");
+  const responseText = await r.text();
+  return {
+    ok: r.status === 201 && !!postId,
+    status: r.status,
+    postId: postId || null,
+    error: r.status === 201 ? null : responseText.slice(0,800),
+    mediaMode: media.videos.length ? "video" : media.images.length > 1 ? "multiImage" : media.images.length === 1 ? "image" : "text"
+  };
 }
 
 function linkedinApiHeaders(accessToken, extra = {}) {
@@ -2450,9 +2631,10 @@ ${bodyHtml}
 
           let linkedin = null;
           if (!existing.linkedinPostId) {
-            linkedin = await linkedinCreateTextPost(
+            linkedin = await linkedinCreateNativePostFromHtml(
               env,
-              linkedinCommentaryFromHtml(articleHtml, articleUrl)
+              articleHtml,
+              url.origin
             );
           }
 
