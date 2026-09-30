@@ -38,7 +38,7 @@ async function tgSendPhotoFromUrl(token, chatId, photoUrl, caption, replyMarkup)
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "gemini-multi-fallback-v12";
+const BUILD_VERSION = "telegram-update-dedupe-v13";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -1298,6 +1298,15 @@ export class CmsStore {
         await this.ctx.storage.put("latestArticleId", data?.id || ARTICLE_ID);
         return json({ ok: true });
       }
+    }
+
+    if (url.pathname.startsWith("/seen-update/") && request.method === "POST") {
+      const id = decodeURIComponent(url.pathname.slice("/seen-update/".length));
+      const key = `seen-update:${id}`;
+      const old = await this.ctx.storage.get(key);
+      if (old) return json({ duplicate: true });
+      await this.ctx.storage.put(key, Date.now());
+      return json({ duplicate: false });
     }
 
     if (url.pathname === "/owner") {
@@ -2694,6 +2703,12 @@ ${bodyHtml}
     }
 
     const update = await request.json();
+
+    if (update.update_id !== undefined) {
+      const seen = await cmsStub(env).fetch(`https://cms.internal/seen-update/${encodeURIComponent(String(update.update_id))}`, { method: "POST" });
+      const seenData = await seen.json().catch(()=>({}));
+      if (seenData.duplicate) return new Response("ok");
+    }
 
     if (update.message?.chat?.type === "private" && update.message?.from?.id) {
       await rememberOwnerTelegramId(env, update.message.from.id);
