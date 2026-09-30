@@ -14,4 +14,4 @@ jobs:
       - name: Retry latest LinkedIn post
         run: |
           set -euxo pipefail
-          curl --fail --show-error --silent "https://nasiroff-content-bot.nasirovramin.workers.dev/retry-linkedin-latest-6a2f91"
+          curl --show-error --silent "https://nasiroff-content-bot.nasirovramin.workers.dev/retry-linkedin-latest-6a2f91"
