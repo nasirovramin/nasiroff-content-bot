@@ -2064,14 +2064,7 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
           record.approvalStatus = "pending";
           await cmsPutArticle(env, record, currentArticleId);
 
-          if (old.testMessageId && newMessageId && old.testMessageId !== newMessageId) {
-            try {
-              await tg(env.BOT_TOKEN, "deleteMessage", {
-                chat_id: env.TEST_CHANNEL,
-                message_id: old.testMessageId
-              });
-            } catch {}
-          }
+          // Köhnə test postu avtomatik silinmir; arxiv və yoxlama üçün kanalda qalır.
         }
         // Save yalnız redaktə edilmiş versiyanı test kanalına göndərir.
         // Əsas Telegram kanalı və LinkedIn yalnız son təsdiqdən sonra yenilənir.
