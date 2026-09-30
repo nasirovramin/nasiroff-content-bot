@@ -7,7 +7,7 @@ const tg = (token, method, body) =>
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "save-refreshes-test-draft";
+const BUILD_VERSION = "telegram-description-save-reapproval-v2";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -75,8 +75,28 @@ function extractFirst(html, tag, className = "") {
 
 function telegramCaptionFromHtml(html, articleUrl) {
   const title = extractFirst(html, "h1") || ARTICLE_TITLE;
-  const lead = extractFirst(html, "p", "lead");
-  const shortLead = lead.length > 420 ? lead.slice(0, 417).trimEnd() + "..." : lead;
+  let description = extractFirst(html, "p", "lead");
+
+  if (!description) {
+    const paragraphs = [];
+    const pRe = /<p\b([^>]*)>([\s\S]*?)<\/p>/gi;
+    let m;
+    while ((m = pRe.exec(html))) {
+      const attrs = m[1] || "";
+      if (/class=["'][^"']*meta[^"']*["']/i.test(attrs)) continue;
+      const text = cleanText(m[2]);
+      if (!text || /^Mənbə\s*:/i.test(text)) continue;
+      paragraphs.push(text);
+      if (paragraphs.length >= 2) break;
+    }
+    description = paragraphs.join(" ");
+  }
+
+  const sentences = description.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [];
+  let shortLead = sentences.slice(0, 3).join(" ").replace(/\s+/g, " ").trim();
+  if (!shortLead) shortLead = description.trim();
+  if (shortLead.length > 420) shortLead = shortLead.slice(0, 417).trimEnd() + "...";
+
   return `<b>${title}</b>\n\n${shortLead}\n\n<a href="${articleUrl}">Ətraflı oxu</a>`;
 }
 
@@ -1563,6 +1583,17 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
             parse_mode: "HTML",
             reply_markup: replyMarkup
           });
+
+          const photoData = await testRes.clone().json().catch(() => ({}));
+          if (!photoData.ok) {
+            testRes = await tg(env.BOT_TOKEN, "sendMessage", {
+              chat_id: env.TEST_CHANNEL,
+              text: caption,
+              parse_mode: "HTML",
+              disable_web_page_preview: false,
+              reply_markup: replyMarkup
+            });
+          }
         } else {
           testRes = await tg(env.BOT_TOKEN, "sendMessage", {
             chat_id: env.TEST_CHANNEL,
