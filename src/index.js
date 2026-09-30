@@ -38,7 +38,7 @@ async function tgSendPhotoFromUrl(token, chatId, photoUrl, caption, replyMarkup)
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "linkedin-internal-media-fix-v7";
+const BUILD_VERSION = "linkedin-cover-repair-v8";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -325,6 +325,54 @@ async function linkedinCreateArticleCardPost(env, html, articleUrl, origin) {
     error: r.status === 201 ? null : responseText.slice(0,800),
     mediaMode: "article"
   };
+}
+
+async function repairBrokenArticleCover(env, article, articleId, origin) {
+  if (!article?.html) return article;
+
+  const media = linkedinMediaUrlsFromHtml(article.html, origin);
+  const current = media.images[0];
+  if (!current) return article;
+
+  let ok = false;
+  try {
+    const r = await linkedinImageSource(env, current);
+    ok = r.ok;
+  } catch {}
+
+  if (ok) return article;
+
+  let replacement = null;
+
+  if (article.sourceImageUrl) {
+    try {
+      const r = await fetch(article.sourceImageUrl, { redirect: "follow" });
+      if (r.ok && (r.headers.get("content-type") || "").startsWith("image/")) {
+        const cached = await cacheRemoteImage(env, origin, article.sourceImageUrl);
+        if (cached) replacement = cached;
+      }
+    } catch {}
+  }
+
+  if (!replacement && articleId === ARTICLE_ID) {
+    replacement = "/media/eyes.jpg";
+  }
+
+  if (!replacement) return article;
+
+  const html = article.html.replace(
+    /(<img[^>]+src=["'])[^"']+(["'][^>]*>)/i,
+    `$1${replacement}$2`
+  );
+
+  const repaired = {
+    ...article,
+    html,
+    mediaKeys: extractMediaKeys(html),
+    updatedAt: new Date().toISOString()
+  };
+  await cmsPutArticle(env, repaired, articleId);
+  return repaired;
 }
 
 async function linkedinCreateNativePostFromHtml(env, html, origin, articleUrl) {
@@ -1467,11 +1515,13 @@ export default {
 
     if (url.pathname === "/retry-linkedin-latest-6a2f91") {
       const latestArticleId = await cmsGetLatestArticleId(env);
-      const article = await cmsGetArticle(env, latestArticleId);
+      let article = await cmsGetArticle(env, latestArticleId);
       if (!article?.html) return json({ ok:false, error:"latest_article_missing" }, 404);
       if (article.linkedinPostId) {
         return json({ ok:true, skipped:"already_published", postId:article.linkedinPostId });
       }
+
+      article = await repairBrokenArticleCover(env, article, latestArticleId, url.origin);
 
       const articleUrl = `${url.origin}/article/${encodeURIComponent(latestArticleId)}`;
       const linkedin = await linkedinCreateNativePostFromHtml(
@@ -1670,9 +1720,8 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
         const saved = await cmsPutArticle(env, record, currentArticleId);
         if (!saved.ok) return json({ ok: false, error: "save_failed" }, 500);
 
-        for (const key of removed) {
-          try { await cmsDeleteMedia(env, key); } catch {}
-        }
+        // Köhnə media faylları Save zamanı dərhal silinmir.
+        // Bu, Edit -> Save -> təsdiq axınında şəkil linkinin qırılmasının qarşısını alır.
 
         const articleUrl = `${url.origin}/article/${encodeURIComponent(currentArticleId)}`;
 
@@ -2828,7 +2877,8 @@ ${bodyHtml}
           });
 
           const publishedMessageId = copiedData.result.message_id;
-          const existing = await cmsGetArticle(env, publishArticleId) || {};
+          let existing = await cmsGetArticle(env, publishArticleId) || {};
+          existing = await repairBrokenArticleCover(env, existing, publishArticleId, url.origin);
           const articleHtml = existing.html || defaultArticleHtml();
           const articleUrl = `${url.origin}/article/${encodeURIComponent(publishArticleId)}`;
 
