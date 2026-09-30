@@ -2748,10 +2748,36 @@ markSaved();
       }
 
       if (currentArticleId) {
-        const savedArticle = await cmsGetArticle(env, currentArticleId);
+        let savedArticle = await cmsGetArticle(env, currentArticleId);
         if (!savedArticle && currentArticleId !== ARTICLE_ID) {
           return new Response("Məqalə tapılmadı.", { status: 404 });
         }
+
+        // Köhnə uzun linkli məqalələrə də avtomatik qısa slug ver.
+        if (savedArticle) {
+          const existingSlug = String(savedArticle.slug || "");
+          const hasCleanSlug =
+            existingSlug &&
+            existingSlug !== currentArticleId &&
+            /^[a-z0-9][a-z0-9-]{0,63}$/.test(existingSlug) &&
+            existingSlug.length <= 32;
+
+          if (!hasCleanSlug) {
+            const generatedSlug = await ensureUniqueArticleSlug(
+              env,
+              shortArticleSlug(articleTitleFromHtml(savedArticle.html || "")),
+              currentArticleId
+            );
+            savedArticle = {
+              ...savedArticle,
+              slug: generatedSlug,
+              updatedAt: new Date().toISOString()
+            };
+            await cmsPutArticle(env, savedArticle, currentArticleId);
+            await cmsPutArticleSlug(env, generatedSlug, currentArticleId);
+          }
+        }
+
         const rawBodyHtml = savedArticle?.html || defaultArticleHtml();
         const bodyHtml = rawBodyHtml
           .replace(/<p>\s*<strong>\s*Mənbə:\s*<\/strong>\s*<a\b[^>]*>\s*Orijinal material\s*<\/a>\s*<\/p>/gi, "")
@@ -2769,9 +2795,11 @@ markSaved();
         }
 
         // Köhnə /article/<id> linkləri varsa, təmiz slug ünvanına yönləndir.
-        if (publicArticleMatch && savedArticle?.slug && url.searchParams.get("preview") !== "1") {
+        if (publicArticleMatch && savedArticle?.slug) {
           const cleanUrl = publicArticleUrl(savedArticle, currentArticleId);
-          if (!cleanUrl.includes("/article/")) return Response.redirect(cleanUrl, 301);
+          if (!cleanUrl.includes("/article/")) {
+            return Response.redirect(cleanUrl + url.search, 301);
+          }
         }
 
         const pageTitle = articleTitleFromHtml(bodyHtml);
