@@ -38,7 +38,7 @@ async function tgSendPhotoFromUrl(token, chatId, photoUrl, caption, replyMarkup)
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "full-translation-inline-links";
+const BUILD_VERSION = "translation-under-worker-budget";
 const enc = new TextEncoder();
 const timeoutSignal = (ms) => AbortSignal.timeout(ms);
 
@@ -1021,7 +1021,7 @@ async function fetchReadableSourceText(sourceUrl) {
     const text = cleanText(html)
       .replace(/\s+/g, " ")
       .trim()
-      .slice(0, 70000);
+      .slice(0, 48000);
 
     const linkBlock = links.length
       ? `MƏNBƏDƏKİ LİNKLƏR:\n${links.join("\n")}`
@@ -1087,8 +1087,12 @@ ${readableSource ? `MƏNBƏNİN MƏTNİ:\n${readableSource}\n\n` : ""}Qaydalar:
   };
 
   let lastError = null;
+  const deadline = Date.now() + 21000;
 
   for (const model of models) {
+    const remaining = deadline - Date.now();
+    if (remaining < 1200) break;
+
     try {
       const r = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
@@ -1104,10 +1108,10 @@ ${readableSource ? `MƏNBƏNİN MƏTNİ:\n${readableSource}\n\n` : ""}Qaydalar:
             generationConfig: {
               response_mime_type: "application/json",
               response_schema: schema,
-              max_output_tokens: 10000
+              max_output_tokens: 8000
             }
           }),
-          signal: timeoutSignal(30000)
+          signal: timeoutSignal(Math.min(remaining, 20000))
         }
       );
 
@@ -1120,9 +1124,15 @@ ${readableSource ? `MƏNBƏNİN MƏTNİ:\n${readableSource}\n\n` : ""}Qaydalar:
         if (!raw) throw new Error("Gemini_empty_response");
         return JSON.parse(raw);
       }
+
       lastError = `Gemini_${r.status}_${data?.error?.message || "error"}`;
+
+      // Only try the next model when the service rejected quickly.
+      if (![429, 500, 502, 503, 504].includes(r.status)) break;
     } catch (e) {
       lastError = String(e?.message || e);
+      // A timeout consumed the budget; don't let the request hang on more models.
+      if (lastError.includes("timed out") || lastError.includes("Timeout")) break;
     }
   }
 
@@ -1229,7 +1239,7 @@ async function processSourceDraftMessage(env, origin, sourceUrl, userId, chatId)
       chat_id: chatId,
       text: missingKey
         ? "Bu bot üçün Gemini API açarı yoxdur. GEMINI_CONTENT_API_KEY Secret əlavə edilməlidir."
-        : msg.includes("timed out") || msg.includes("Timeout") ? "Mənbə gec cavab verdi. Bir dəfə də göndərin, bot başqa sürətli model ilə yenidən yoxlayacaq." : `Tərcümə etmək alınmadı: ${msg.slice(0, 300)}`
+        : msg.includes("timed out") || msg.includes("Timeout") ? "Tərcümə 30 saniyəlik server limitinə çatdı. Linki bir dəfə də göndərin; sistem sürətli model ilə yenidən cəhd edəcək." : `Tərcümə etmək alınmadı: ${msg.slice(0, 300)}`
     });
   }
 }
