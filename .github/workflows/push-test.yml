@@ -13,4 +13,4 @@ jobs:
         run: sleep 90
       - name: Trigger test post
         run: |
-          curl --fail --show-error --silent "https://nasiroff-content-bot.nasirovramin.workers.dev/push-approved-8f31d2"
+          curl --fail --show-error --silent "https://nasiroff-content-bot.nasirovramin.workers.dev/resend-latest-test-7f4c91"
