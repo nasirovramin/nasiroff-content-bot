@@ -38,7 +38,7 @@ async function tgSendPhotoFromUrl(token, chatId, photoUrl, caption, replyMarkup)
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "gemini-3-8-flash-v11";
+const BUILD_VERSION = "gemini-multi-fallback-v12";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -944,7 +944,13 @@ async function geminiDraftFromSource(env, sourceUrl) {
 
   const models = [
     env.GEMINI_MODEL || "gemini-3.8-flash",
-    env.GEMINI_FALLBACK_MODEL || "gemini-3.7-flash"
+    env.GEMINI_FALLBACK_MODEL || "gemini-3.7-flash",
+    "gemini-3.6-flash",
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
+    "gemini-3.1-pro-preview",
+    "gemini-3-flash-preview"
   ].filter((x, i, a) => x && a.indexOf(x) === i);
 
   const prompt = `
