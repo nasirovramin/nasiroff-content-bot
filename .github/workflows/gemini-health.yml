@@ -1,0 +1,15 @@
+name: Gemini Health Check
+
+on:
+  push:
+    paths:
+      - "gemini-health-trigger.txt"
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Gemini health
+        run: |
+          set -euxo pipefail
+          curl --show-error --silent "https://nasiroff-content-bot.nasirovramin.workers.dev/health/gemini"
