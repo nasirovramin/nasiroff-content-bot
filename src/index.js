@@ -38,7 +38,7 @@ async function tgSendPhotoFromUrl(token, chatId, photoUrl, caption, replyMarkup)
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "telegram-update-dedupe-v13";
+const BUILD_VERSION = "gemini-multi-health-v14";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -1684,38 +1684,64 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
       if (!env.GEMINI_CONTENT_API_KEY) {
         return json({ ok: false, configured: false, error: "missing_key" }, 503);
       }
-      try {
-        const model = env.GEMINI_MODEL || "gemini-3.8-flash";
-        const r = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-          {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-              "x-goog-api-key": env.GEMINI_CONTENT_API_KEY
-            },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: "Cavab olaraq yalnız OK yaz." }] }],
-              generationConfig: { temperature: 0 }
-            })
-          }
-        );
-        const data = await r.json().catch(()=>({}));
-        return json({
-          ok: r.ok,
-          configured: true,
-          model,
-          status: r.status,
-          response: r.ok
-            ? (data?.candidates?.[0]?.content?.parts || []).map(p=>p?.text||"").join("").trim().slice(0,20)
-            : null,
-          error: r.ok ? null : (data?.error?.message || "gemini_error")
-        }, r.ok ? 200 : 502);
-      } catch (e) {
-        return json({ ok: false, configured: true, error: String(e?.message || e).slice(0,180) }, 502);
-      }
-    }
 
+      const models = [
+        env.GEMINI_MODEL || "gemini-3.8-flash",
+        env.GEMINI_FALLBACK_MODEL || "gemini-3.7-flash",
+        "gemini-3.6-flash",
+        "gemini-3.5-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-3.1-flash-lite",
+        "gemini-3.1-pro-preview",
+        "gemini-3-flash-preview"
+      ].filter((x, i, a) => x && a.indexOf(x) === i);
+
+      const results = [];
+      for (const model of models) {
+        try {
+          const r = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+            {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                "x-goog-api-key": env.GEMINI_CONTENT_API_KEY
+              },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: "Cavab olaraq yalnız OK yaz." }] }]
+              })
+            }
+          );
+          const data = await r.json().catch(()=>({}));
+          const response = r.ok
+            ? (data?.candidates?.[0]?.content?.parts || []).map(p=>p?.text||"").join("").trim().slice(0,20)
+            : null;
+          results.push({
+            model,
+            ok: r.ok,
+            status: r.status,
+            response,
+            error: r.ok ? null : (data?.error?.message || "gemini_error")
+          });
+        } catch (e) {
+          results.push({
+            model,
+            ok: false,
+            status: null,
+            response: null,
+            error: String(e?.message || e).slice(0,180)
+          });
+        }
+      }
+
+      const working = results.filter(x => x.ok);
+      return json({
+        ok: working.length > 0,
+        configured: true,
+        workingModels: working.map(x => x.model),
+        results
+      }, working.length > 0 ? 200 : 503);
+    }
 
     const apiArticleMatch = url.pathname.match(/^\/api\/article\/([^/]+)$/);
     if (apiArticleMatch) {
