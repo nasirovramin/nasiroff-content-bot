@@ -200,7 +200,60 @@ async function linkedinUploadVideo(env, videoUrl) {
   return { ok:true, urn:value.video };
 }
 
-async function linkedinCreateNativePostFromHtml(env, html, origin) {
+async function linkedinCreateArticleCardPost(env, html, articleUrl, origin) {
+  const li = await cmsGetLinkedIn(env);
+  if (!linkedinConnectionUsable(li)) {
+    return { ok:false, error:"linkedin_not_connected_or_expired" };
+  }
+
+  const title = extractFirst(html, "h1") || ARTICLE_TITLE;
+  const lead = extractFirst(html, "p", "lead");
+  const media = linkedinMediaUrlsFromHtml(html, origin);
+  let thumbnail = null;
+
+  if (media.images.length) {
+    const up = await linkedinUploadImage(env, media.images[0]);
+    if (up.ok) thumbnail = up.urn;
+  }
+
+  const article = {
+    source: articleUrl,
+    title,
+    description: lead.length > 220 ? lead.slice(0,217).trimEnd() + "..." : lead
+  };
+  if (thumbnail) article.thumbnail = thumbnail;
+
+  const payload = {
+    author: `urn:li:person:${li.profile.sub}`,
+    commentary: `${title}\n\n${lead.length > 420 ? lead.slice(0,417).trimEnd() + "..." : lead}\n\nƏtraflı oxu`,
+    visibility: "PUBLIC",
+    distribution: {
+      feedDistribution: "MAIN_FEED",
+      targetEntities: [],
+      thirdPartyDistributionChannels: []
+    },
+    content: { article },
+    lifecycleState: "PUBLISHED",
+    isReshareDisabledByAuthor: false
+  };
+
+  const r = await fetch("https://api.linkedin.com/rest/posts", {
+    method: "POST",
+    headers: linkedinApiHeaders(li.accessToken),
+    body: JSON.stringify(payload)
+  });
+  const postId = r.headers.get("x-restli-id");
+  const responseText = await r.text();
+  return {
+    ok: r.status === 201 && !!postId,
+    status: r.status,
+    postId: postId || null,
+    error: r.status === 201 ? null : responseText.slice(0,800),
+    mediaMode: "article"
+  };
+}
+
+async function linkedinCreateNativePostFromHtml(env, html, origin, articleUrl) {
   const li = await cmsGetLinkedIn(env);
   if (!linkedinConnectionUsable(li)) {
     return { ok:false, error:"linkedin_not_connected_or_expired" };
@@ -208,6 +261,14 @@ async function linkedinCreateNativePostFromHtml(env, html, origin) {
 
   const commentary = linkedinCommentaryFromHtml(html);
   const media = linkedinMediaUrlsFromHtml(html, origin);
+
+  // Ağıllı LinkedIn qaydası:
+  // 2+ şəkil varsa tam mətni LinkedIn postuna sıxışdırmırıq.
+  // Cloudflare məqaləsini LinkedIn Article card kimi göstəririk.
+  if (media.images.length > 1 && articleUrl) {
+    return linkedinCreateArticleCardPost(env, html, articleUrl, origin);
+  }
+
   const author = `urn:li:person:${li.profile.sub}`;
 
   const payload = {
@@ -2634,7 +2695,8 @@ ${bodyHtml}
             linkedin = await linkedinCreateNativePostFromHtml(
               env,
               articleHtml,
-              url.origin
+              url.origin,
+              articleUrl
             );
           }
 
