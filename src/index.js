@@ -567,6 +567,28 @@ function buildArticleId(title = "") {
   return `${Date.now().toString(36)}-${slugPart(title)}`.slice(0, 54);
 }
 
+function shortArticleSlug(title = "") {
+  const stop = new Set([
+    "ucun","ve","ile","kimi","bir","bu","haqqinda","nece","nedir","olan","olaraq",
+    "da","de","ki","haqda","dair","uzre","daha","en"
+  ]);
+  const words = slugPart(title).split("-").filter(Boolean);
+  const meaningful = words.filter(word => !stop.has(word));
+  return ((meaningful.length ? meaningful : words).slice(0, 2).join("-") || "meqale").slice(0, 32);
+}
+
+function articleTitleFromHtml(html = "") {
+  return extractFirst(html, "h1") || ARTICLE_TITLE;
+}
+
+function publicArticleUrl(article, articleId) {
+  const slug = String(article?.slug || "").trim();
+  if (slug && slug !== articleId && /^[a-z0-9][a-z0-9-]{0,63}$/.test(slug)) {
+    return `${PUBLIC_ORIGIN}/${encodeURIComponent(slug)}`;
+  }
+  return `${PUBLIC_ORIGIN}/article/${encodeURIComponent(articleId)}`;
+}
+
 
 function renderDraftText(value = "") {
   const raw = String(value);
@@ -1154,10 +1176,11 @@ async function createSourceDraft(env, origin, sourceUrl, userId) {
   const cachedImage = await cacheRemoteImage(env, origin, originalImage);
   const imageUrl = cachedImage || "";
   const html = buildArticleHtmlFromDraft(draft, sourceUrl, imageUrl);
+  const slug = await ensureUniqueArticleSlug(env, shortArticleSlug(draft.title), articleId);
 
   const record = {
     id: articleId,
-    slug: articleId,
+    slug,
     html,
     mediaKeys: extractMediaKeys(html),
     sourceUrl,
@@ -1169,6 +1192,7 @@ async function createSourceDraft(env, origin, sourceUrl, userId) {
     updatedAt: new Date().toISOString()
   };
   await cmsPutArticle(env, record, articleId);
+  await cmsPutArticleSlug(env, slug, articleId);
   await cmsPutLatestArticleId(env, articleId);
   return record;
 }
@@ -1184,7 +1208,7 @@ async function processSourceDraftMessage(env, origin, sourceUrl, userId, chatId)
     const articleId = record.id;
     const sig = await makeEditSig(env, articleId, userId);
     const editUrl = `${PUBLIC_ORIGIN}/edit/${encodeURIComponent(articleId)}?u=${encodeURIComponent(userId)}&sig=${sig}`;
-    const articleUrl = `${PUBLIC_ORIGIN}/article/${encodeURIComponent(articleId)}`;
+    const articleUrl = publicArticleUrl(record, articleId);
     const caption = telegramCaptionFromHtml(record.html, articleUrl);
     const cover = record.html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] || "";
 
@@ -1283,6 +1307,32 @@ async function cmsPutArticle(env, record, articleId = record?.id || ARTICLE_ID) 
 async function cmsDeleteArticle(env, articleId) {
   const path = articleId === ARTICLE_ID ? "/article" : `/article/${encodeURIComponent(articleId)}`;
   return cmsStub(env).fetch(`https://cms.internal${path}`, { method: "DELETE" });
+}
+
+async function cmsGetArticleIdBySlug(env, slug) {
+  const r = await cmsStub(env).fetch(`https://cms.internal/slug/${encodeURIComponent(slug)}`);
+  if (!r.ok) return null;
+  const data = await r.json().catch(() => null);
+  return data?.id || null;
+}
+
+async function cmsPutArticleSlug(env, slug, articleId) {
+  return cmsStub(env).fetch(`https://cms.internal/slug/${encodeURIComponent(slug)}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id: articleId })
+  });
+}
+
+async function ensureUniqueArticleSlug(env, desiredSlug, articleId) {
+  const base = (desiredSlug || "meqale").slice(0, 32);
+  for (let i = 1; i <= 50; i++) {
+    const suffix = i === 1 ? "" : `-${i}`;
+    const candidate = (base.slice(0, 32 - suffix.length) + suffix).replace(/-+$/g, "");
+    const existingId = await cmsGetArticleIdBySlug(env, candidate);
+    if (!existingId || existingId === articleId) return candidate;
+  }
+  return `${base.slice(0, 25)}-${Date.now().toString(36).slice(-5)}`;
 }
 
 async function sourceSeenKey(sourceUrl) {
@@ -1452,6 +1502,21 @@ export class CmsStore {
       }
       if (request.method === "DELETE") {
         await this.ctx.storage.delete(key);
+        return json({ ok: true });
+      }
+    }
+
+    if (url.pathname.startsWith("/slug/")) {
+      const slug = decodeURIComponent(url.pathname.slice("/slug/".length));
+      const key = `slug:${slug}`;
+      if (request.method === "GET") {
+        const id = await this.ctx.storage.get(key);
+        return json(id ? { id } : null, id ? 200 : 404);
+      }
+      if (request.method === "PUT") {
+        const data = await request.json();
+        if (!data?.id) return json({ ok: false, error: "id_required" }, 400);
+        await this.ctx.storage.put(key, String(data.id));
         return json({ ok: true });
       }
     }
@@ -1892,10 +1957,21 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
         const oldMediaKeys = Array.isArray(old.mediaKeys) ? old.mediaKeys : [];
         const removed = oldMediaKeys.filter(k => !newMediaKeys.includes(k));
 
+        const oldSlug = String(old.slug || "");
+        const keepExistingCleanSlug =
+          oldSlug &&
+          oldSlug !== currentArticleId &&
+          /^[a-z0-9][a-z0-9-]{0,63}$/.test(oldSlug) &&
+          oldSlug.length <= 32;
+        const desiredSlug = keepExistingCleanSlug
+          ? oldSlug
+          : shortArticleSlug(articleTitleFromHtml(body.html));
+        const slug = await ensureUniqueArticleSlug(env, desiredSlug, currentArticleId);
+
         const record = {
           ...old,
           id: currentArticleId,
-          slug: currentArticleId,
+          slug,
           html: body.html,
           mediaKeys: newMediaKeys,
           updatedAt: new Date().toISOString()
@@ -1903,11 +1979,12 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
 
         const saved = await cmsPutArticle(env, record, currentArticleId);
         if (!saved.ok) return json({ ok: false, error: "save_failed" }, 500);
+        await cmsPutArticleSlug(env, slug, currentArticleId);
 
         // Köhnə media faylları Save zamanı dərhal silinmir.
         // Bu, Edit -> Save -> təsdiq axınında şəkil linkinin qırılmasının qarşısını alır.
 
-        const articleUrl = `${PUBLIC_ORIGIN}/article/${encodeURIComponent(currentArticleId)}`;
+        const articleUrl = publicArticleUrl(record, currentArticleId);
 
         let testTelegram = null;
         const caption = telegramCaptionFromHtml(body.html, articleUrl);
@@ -2085,7 +2162,7 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
         const initialArticle = await cmsGetArticle(env, currentArticleId);
         const initialEditorHtml = initialArticle?.html || defaultArticleHtml();
 
-        const articleUrl = `${PUBLIC_ORIGIN}/article/${encodeURIComponent(currentArticleId)}`;
+        const articleUrl = publicArticleUrl(initialArticle, currentArticleId);
         const previewUrl = `${articleUrl}?preview=1&u=${encodeURIComponent(userId)}&sig=${encodeURIComponent(sig)}`;
         const apiUrl = `${url.origin}/api/article/${encodeURIComponent(currentArticleId)}?u=${encodeURIComponent(userId)}&sig=${encodeURIComponent(sig)}`;
         const mediaApiUrl = `${url.origin}/api/media?a=${encodeURIComponent(currentArticleId)}&u=${encodeURIComponent(userId)}&sig=${encodeURIComponent(sig)}`;
@@ -2662,24 +2739,30 @@ markSaved();
       }
 
       const publicArticleMatch = url.pathname.match(/^\/article\/([^/]+)$/);
-      if (publicArticleMatch) {
-        const currentArticleId = decodeURIComponent(publicArticleMatch[1]);
+      const publicSlugMatch = url.pathname.match(/^\/([a-z0-9][a-z0-9-]{0,63})$/);
+      let currentArticleId = publicArticleMatch
+        ? decodeURIComponent(publicArticleMatch[1])
+        : null;
+
+      if (!currentArticleId && publicSlugMatch) {
+        currentArticleId = await cmsGetArticleIdBySlug(env, publicSlugMatch[1]);
+      }
+
+      if (currentArticleId) {
         const savedArticle = await cmsGetArticle(env, currentArticleId);
         if (!savedArticle && currentArticleId !== ARTICLE_ID) {
           return new Response("Məqalə tapılmadı.", { status: 404 });
         }
         const bodyHtml = savedArticle?.html || defaultArticleHtml();
 
-        let backHref = "https://t.me/nasiroff_az";
-        let backLabel = "← Geri qayıt";
-        if (url.searchParams.get("preview") === "1") {
-          const previewUserId = url.searchParams.get("u");
-          const previewSig = url.searchParams.get("sig");
-          if (await validEditSig(env, currentArticleId, previewUserId, previewSig)) {
-            backHref = `${url.origin}/edit/${encodeURIComponent(currentArticleId)}?u=${encodeURIComponent(previewUserId)}&sig=${encodeURIComponent(previewSig)}`;
-            backLabel = "← Edit rejiminə qayıt";
-          }
+        // Köhnə /article/<id> linkləri varsa, təmiz slug ünvanına yönləndir.
+        if (publicArticleMatch && savedArticle?.slug && url.searchParams.get("preview") !== "1") {
+          const cleanUrl = publicArticleUrl(savedArticle, currentArticleId);
+          if (!cleanUrl.includes("/article/")) return Response.redirect(cleanUrl, 301);
         }
+
+        const pageTitle = articleTitleFromHtml(bodyHtml);
+        const pageDescription = extractFirst(bodyHtml, "p", "lead") || pageTitle;
         const html = `<!doctype html>
 <html lang="az">
 <head>
@@ -2688,8 +2771,8 @@ markSaved();
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>${ARTICLE_TITLE}</title>
-<meta name="description" content="Kreativ prosesə dörd fərqli baxış: uşaq, İsida, Osiris və firon.">
+<title>${escHtml(pageTitle)}</title>
+<meta name="description" content="${escHtml(pageDescription.slice(0, 180))}">
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;padding:0;background:#fff;color:#171717}
@@ -2702,9 +2785,7 @@ h2{font-size:24px;line-height:1.22;margin:30px 0 10px;font-weight:600;letter-spa
 p{font-size:18px;line-height:1.58;margin:0 0 16px;font-weight:400}
 img,video{display:block;width:100%;height:auto;margin:22px 0 30px;border-radius:0}.youtube-embed{position:relative;width:100%;aspect-ratio:16/9;margin:22px 0 30px}.youtube-embed iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
 .lead{font-size:25px;line-height:1.23;font-weight:700;letter-spacing:-.02em;margin:0 0 28px}
-main a:not(.back){color:#0b57d0;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
-.back{display:inline-flex;align-items:center;justify-content:center;margin-top:26px;padding:9px 14px;border:1px solid #a7a7a7;border-radius:999px;color:#171717;text-decoration:none;font-size:14px;font-weight:600}
-.back:hover{border-color:#171717}
+main a{color:#0b57d0;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
 @media(max-width:640px){
   main{padding:22px 18px 52px}
   h1{font-size:36px;line-height:1.06;margin-bottom:10px}
@@ -2713,14 +2794,12 @@ main a:not(.back){color:#0b57d0;text-decoration:underline;text-underline-offset:
   p{font-size:16px;line-height:1.55;margin-bottom:14px}
   .lead{font-size:19px;line-height:1.28;margin-bottom:22px}
   img,video{margin-bottom:22px}
-  .back{font-size:13px;padding:8px 12px}
 }
 </style>
 </head>
 <body>
 <main>
 ${bodyHtml}
-<a class="back" href="${backHref}">${backLabel}</a>
 </main>
 </body>
 </html>`;
@@ -2736,7 +2815,8 @@ ${bodyHtml}
       }
 
       if (url.pathname === "/push-approved-8f31d2") {
-        const articleUrl = `${PUBLIC_ORIGIN}/article/dord-baxis`;
+        const defaultRecord = await cmsGetArticle(env, ARTICLE_ID) || { slug: "dord-baxis", html: defaultArticleHtml() };
+        const articleUrl = publicArticleUrl(defaultRecord, ARTICLE_ID);
         const caption = telegramCaptionFromHtml(defaultArticleHtml(), articleUrl);
         const imageRes = await fetch(imageSource);
 
@@ -2770,7 +2850,7 @@ ${bodyHtml}
       const ownerId = article.ownerTelegramId || await cmsGetOwnerTelegramId(env);
       if (!ownerId) return json({ ok: false, error: "owner_missing" }, 400);
 
-      const articleUrl = `${PUBLIC_ORIGIN}/article/${encodeURIComponent(latestArticleId)}`;
+      const articleUrl = publicArticleUrl(article, latestArticleId);
       const caption = telegramCaptionFromHtml(article.html, articleUrl);
       const cover = article.html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] || "";
       const editSig = await makeEditSig(env, latestArticleId, ownerId);
@@ -2841,7 +2921,7 @@ ${bodyHtml}
       const article = await cmsGetArticle(env, latestArticleId);
       if (!article?.html) return json({ ok: false, error: "latest_article_missing" }, 404);
 
-      const articleUrl = `${PUBLIC_ORIGIN}/article/${encodeURIComponent(latestArticleId)}`;
+      const articleUrl = publicArticleUrl(article, latestArticleId);
       const caption = telegramCaptionFromHtml(article.html, articleUrl);
       const cover = article.html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] || "";
 
@@ -3008,7 +3088,7 @@ ${bodyHtml}
           let existing = await cmsGetArticle(env, publishArticleId) || {};
           existing = await repairBrokenArticleCover(env, existing, publishArticleId, url.origin);
           const articleHtml = existing.html || defaultArticleHtml();
-          const articleUrl = `${PUBLIC_ORIGIN}/article/${encodeURIComponent(publishArticleId)}`;
+          const articleUrl = publicArticleUrl(existing, publishArticleId);
 
           let linkedin = null;
           if (!existing.linkedinPostId) {
