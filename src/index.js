@@ -39,6 +39,7 @@ async function tgSendPhotoFromUrl(token, chatId, photoUrl, caption, replyMarkup)
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
 const BUILD_VERSION = "persistent-edit-after-publish";
+const PUBLIC_ORIGIN = "https://blog.raminnasiroff.com";
 const enc = new TextEncoder();
 const timeoutSignal = (ms) => AbortSignal.timeout(ms);
 
@@ -1182,8 +1183,8 @@ async function processSourceDraftMessage(env, origin, sourceUrl, userId, chatId)
 
     const articleId = record.id;
     const sig = await makeEditSig(env, articleId, userId);
-    const editUrl = `${origin}/edit/${encodeURIComponent(articleId)}?u=${encodeURIComponent(userId)}&sig=${sig}`;
-    const articleUrl = `${origin}/article/${encodeURIComponent(articleId)}`;
+    const editUrl = `${PUBLIC_ORIGIN}/edit/${encodeURIComponent(articleId)}?u=${encodeURIComponent(userId)}&sig=${sig}`;
+    const articleUrl = `${PUBLIC_ORIGIN}/article/${encodeURIComponent(articleId)}`;
     const caption = telegramCaptionFromHtml(record.html, articleUrl);
     const cover = record.html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] || "";
 
@@ -1612,6 +1613,22 @@ export default {
     const url = new URL(request.url);
     const imageSource = "https://raw.githubusercontent.com/nasirovramin/nasiroff-content-bot/main.ru/assets/eyes.jpg";
 
+    // Public məqalə, media və editor linklərini həmişə blog.raminnasiroff.com altında saxla.
+    // Köhnə workers.dev ictimai linkləri də avtomatik yeni subdomain-ə yönləndir.
+    if (
+      request.method === "GET" &&
+      url.hostname.endsWith(".workers.dev") &&
+      (
+        url.pathname === "/article" ||
+        url.pathname.startsWith("/article/") ||
+        url.pathname.startsWith("/media-store/") ||
+        url.pathname.startsWith("/media/") ||
+        url.pathname.startsWith("/edit/")
+      )
+    ) {
+      return Response.redirect(PUBLIC_ORIGIN + url.pathname + url.search, 301);
+    }
+
     if (url.pathname === "/linkedin/connect") {
       if (!env.LINKEDIN_CLIENT_ID) {
         return new Response("LINKEDIN_CLIENT_ID hələ Worker-də əlavə edilməyib.", { status: 500 });
@@ -1890,14 +1907,14 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
         // Köhnə media faylları Save zamanı dərhal silinmir.
         // Bu, Edit -> Save -> təsdiq axınında şəkil linkinin qırılmasının qarşısını alır.
 
-        const articleUrl = `${url.origin}/article/${encodeURIComponent(currentArticleId)}`;
+        const articleUrl = `${PUBLIC_ORIGIN}/article/${encodeURIComponent(currentArticleId)}`;
 
         let testTelegram = null;
         const caption = telegramCaptionFromHtml(body.html, articleUrl);
         const cover = body.html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] || "";
         const oldCover = old.html?.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] || "";
         const editSig = await makeEditSig(env, currentArticleId, userId);
-        const editUrl = `${url.origin}/edit/${encodeURIComponent(currentArticleId)}?u=${encodeURIComponent(userId)}&sig=${editSig}`;
+        const editUrl = `${PUBLIC_ORIGIN}/edit/${encodeURIComponent(currentArticleId)}?u=${encodeURIComponent(userId)}&sig=${editSig}`;
         const replyMarkup = {
           inline_keyboard: [
             [{ text: "✏️ Edit", url: editUrl }],
@@ -2032,7 +2049,7 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
         ok: true,
         key: data.key,
         type: data.contentType,
-        url: `${url.origin}/media-store/${encodeURIComponent(data.key)}`
+        url: `${PUBLIC_ORIGIN}/media-store/${encodeURIComponent(data.key)}`
       });
     }
 
@@ -2068,7 +2085,7 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
         const initialArticle = await cmsGetArticle(env, currentArticleId);
         const initialEditorHtml = initialArticle?.html || defaultArticleHtml();
 
-        const articleUrl = `${url.origin}/article/${encodeURIComponent(currentArticleId)}`;
+        const articleUrl = `${PUBLIC_ORIGIN}/article/${encodeURIComponent(currentArticleId)}`;
         const previewUrl = `${articleUrl}?preview=1&u=${encodeURIComponent(userId)}&sig=${encodeURIComponent(sig)}`;
         const apiUrl = `${url.origin}/api/article/${encodeURIComponent(currentArticleId)}?u=${encodeURIComponent(userId)}&sig=${encodeURIComponent(sig)}`;
         const mediaApiUrl = `${url.origin}/api/media?a=${encodeURIComponent(currentArticleId)}&u=${encodeURIComponent(userId)}&sig=${encodeURIComponent(sig)}`;
@@ -2719,7 +2736,7 @@ ${bodyHtml}
       }
 
       if (url.pathname === "/push-approved-8f31d2") {
-        const articleUrl = `${url.origin}/article/dord-baxis`;
+        const articleUrl = `${PUBLIC_ORIGIN}/article/dord-baxis`;
         const caption = telegramCaptionFromHtml(defaultArticleHtml(), articleUrl);
         const imageRes = await fetch(imageSource);
 
@@ -2753,11 +2770,11 @@ ${bodyHtml}
       const ownerId = article.ownerTelegramId || await cmsGetOwnerTelegramId(env);
       if (!ownerId) return json({ ok: false, error: "owner_missing" }, 400);
 
-      const articleUrl = `${url.origin}/article/${encodeURIComponent(latestArticleId)}`;
+      const articleUrl = `${PUBLIC_ORIGIN}/article/${encodeURIComponent(latestArticleId)}`;
       const caption = telegramCaptionFromHtml(article.html, articleUrl);
       const cover = article.html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] || "";
       const editSig = await makeEditSig(env, latestArticleId, ownerId);
-      const editUrl = `${url.origin}/edit/${encodeURIComponent(latestArticleId)}?u=${encodeURIComponent(ownerId)}&sig=${editSig}`;
+      const editUrl = `${PUBLIC_ORIGIN}/edit/${encodeURIComponent(latestArticleId)}?u=${encodeURIComponent(ownerId)}&sig=${editSig}`;
       const replyMarkup = {
         inline_keyboard: [
           [{ text: "✏️ Edit", url: editUrl }],
@@ -2824,7 +2841,7 @@ ${bodyHtml}
       const article = await cmsGetArticle(env, latestArticleId);
       if (!article?.html) return json({ ok: false, error: "latest_article_missing" }, 404);
 
-      const articleUrl = `${url.origin}/article/${encodeURIComponent(latestArticleId)}`;
+      const articleUrl = `${PUBLIC_ORIGIN}/article/${encodeURIComponent(latestArticleId)}`;
       const caption = telegramCaptionFromHtml(article.html, articleUrl);
       const cover = article.html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] || "";
 
@@ -2928,7 +2945,7 @@ ${bodyHtml}
         const userId = update.message.from.id;
         const latestArticleId = await cmsGetLatestArticleId(env);
         const sig = await makeEditSig(env, latestArticleId, userId);
-        const editUrl = `${url.origin}/edit/${encodeURIComponent(latestArticleId)}?u=${encodeURIComponent(userId)}&sig=${sig}`;
+        const editUrl = `${PUBLIC_ORIGIN}/edit/${encodeURIComponent(latestArticleId)}?u=${encodeURIComponent(userId)}&sig=${sig}`;
         await tg(env.BOT_TOKEN, "sendMessage", {
           chat_id: update.message.chat.id,
           text: "Məqaləni açıb birbaşa səhifənin üzərində redaktə edə bilərsiniz.",
@@ -2991,7 +3008,7 @@ ${bodyHtml}
           let existing = await cmsGetArticle(env, publishArticleId) || {};
           existing = await repairBrokenArticleCover(env, existing, publishArticleId, url.origin);
           const articleHtml = existing.html || defaultArticleHtml();
-          const articleUrl = `${url.origin}/article/${encodeURIComponent(publishArticleId)}`;
+          const articleUrl = `${PUBLIC_ORIGIN}/article/${encodeURIComponent(publishArticleId)}`;
 
           let linkedin = null;
           if (!existing.linkedinPostId) {
@@ -3040,7 +3057,7 @@ ${bodyHtml}
           });
 
           const editSig = await makeEditSig(env, publishArticleId, q.from.id);
-          const editUrl = `${url.origin}/edit/${encodeURIComponent(publishArticleId)}?u=${encodeURIComponent(q.from.id)}&sig=${editSig}`;
+          const editUrl = `${PUBLIC_ORIGIN}/edit/${encodeURIComponent(publishArticleId)}?u=${encodeURIComponent(q.from.id)}&sig=${editSig}`;
 
           // Paylaşılandan sonra test/admin draftında Edit düyməsini saxla.
           // Əsas ictimai kanalda bu düymə göstərilmir.
