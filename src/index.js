@@ -38,7 +38,7 @@ async function tgSendPhotoFromUrl(token, chatId, photoUrl, caption, replyMarkup)
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "gemini-retry-fallback-v10";
+const BUILD_VERSION = "dedicated-gemini-content-key-v11";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -849,7 +849,7 @@ async function extractSourceCandidates(sourceUrl) {
 }
 
 async function discoverRelevantSourceItems(env, sourceUrl) {
-  if (!env.GEMINI_API_KEY) throw new Error("GEMINI_API_KEY_missing");
+  if (!env.GEMINI_CONTENT_API_KEY) throw new Error("GEMINI_CONTENT_API_KEY_missing");
 
   const candidates = await extractSourceCandidates(sourceUrl);
   if (!candidates.length) {
@@ -915,7 +915,7 @@ ${compact.map((x,i)=>`${i+1}. [${x.title}] ${x.url}${x.publishedAt ? ` | tarix: 
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-goog-api-key": env.GEMINI_API_KEY
+        "x-goog-api-key": env.GEMINI_CONTENT_API_KEY
       },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
@@ -939,8 +939,8 @@ ${compact.map((x,i)=>`${i+1}. [${x.title}] ${x.url}${x.publishedAt ? ` | tarix: 
 }
 
 async function geminiDraftFromSource(env, sourceUrl) {
-  if (!env.GEMINI_API_KEY) {
-    throw new Error("GEMINI_API_KEY_missing");
+  if (!env.GEMINI_CONTENT_API_KEY) {
+    throw new Error("GEMINI_CONTENT_API_KEY_missing");
   }
 
   const models = [
@@ -995,7 +995,7 @@ Qaydalar:
           method: "POST",
           headers: {
             "content-type": "application/json",
-            "x-goog-api-key": env.GEMINI_API_KEY
+            "x-goog-api-key": env.GEMINI_CONTENT_API_KEY
           },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
@@ -1668,7 +1668,7 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
     }
 
     if (url.pathname === "/health/gemini") {
-      if (!env.GEMINI_API_KEY) {
+      if (!env.GEMINI_CONTENT_API_KEY) {
         return json({ ok: false, configured: false, error: "missing_key" }, 503);
       }
       try {
@@ -1679,7 +1679,7 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
             method: "POST",
             headers: {
               "content-type": "application/json",
-              "x-goog-api-key": env.GEMINI_API_KEY
+              "x-goog-api-key": env.GEMINI_CONTENT_API_KEY
             },
             body: JSON.stringify({
               contents: [{ parts: [{ text: "Cavab olaraq yalnız OK yaz." }] }],
@@ -2817,11 +2817,11 @@ ${bodyHtml}
             text: "Tərcümə hazırdır ✅ Test kanalına göndərdim."
           });
         } catch (e) {
-          const missingKey = String(e?.message || "").includes("GEMINI_API_KEY_missing");
+          const missingKey = String(e?.message || "").includes("GEMINI_CONTENT_API_KEY_missing");
           await tg(env.BOT_TOKEN, "sendMessage", {
             chat_id: update.message.chat.id,
             text: missingKey
-              ? "Gemini API açarı Worker-də yoxdur. GEMINI_API_KEY Secret əlavə edilməlidir."
+              ? "Bu bot üçün ayrıca Gemini API açarı yoxdur. GEMINI_CONTENT_API_KEY Secret əlavə edilməlidir."
               : `Tərcümə etmək alınmadı: ${String(e?.message || e).slice(0, 300)}`
           });
         }
