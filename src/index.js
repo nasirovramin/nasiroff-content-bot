@@ -5,9 +5,40 @@ const tg = (token, method, body) =>
     body: JSON.stringify(body),
   });
 
+
+async function tgSendPhotoFromUrl(token, chatId, photoUrl, caption, replyMarkup) {
+  const src = await fetch(photoUrl, { redirect: "follow" });
+  if (!src.ok) {
+    return { ok: false, error: "photo_source_fetch_failed", status: src.status };
+  }
+
+  const contentType = src.headers.get("content-type") || "image/jpeg";
+  const bytes = await src.arrayBuffer();
+  if (!bytes.byteLength) {
+    return { ok: false, error: "photo_source_empty" };
+  }
+
+  const ext = contentType.includes("png") ? "png" :
+              contentType.includes("webp") ? "webp" :
+              contentType.includes("gif") ? "gif" : "jpg";
+
+  const form = new FormData();
+  form.append("chat_id", String(chatId));
+  form.append("photo", new Blob([bytes], { type: contentType }), `photo.${ext}`);
+  if (caption) form.append("caption", caption);
+  form.append("parse_mode", "HTML");
+  if (replyMarkup) form.append("reply_markup", JSON.stringify(replyMarkup));
+
+  const r = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+    method: "POST",
+    body: form
+  });
+  return r.json().catch(() => ({ ok: false, error: "telegram_invalid_response", status: r.status }));
+}
+
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "telegram-description-save-reapproval-v2";
+const BUILD_VERSION = "telegram-photo-upload-v3";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -1574,37 +1605,24 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
           } catch {}
         }
 
-        let testRes;
         if (cover) {
-          testRes = await tg(env.BOT_TOKEN, "sendPhoto", {
-            chat_id: env.TEST_CHANNEL,
-            photo: new URL(cover, url.origin).href,
+          testTelegram = await tgSendPhotoFromUrl(
+            env.BOT_TOKEN,
+            env.TEST_CHANNEL,
+            new URL(cover, url.origin).href,
             caption,
-            parse_mode: "HTML",
-            reply_markup: replyMarkup
-          });
-
-          const photoData = await testRes.clone().json().catch(() => ({}));
-          if (!photoData.ok) {
-            testRes = await tg(env.BOT_TOKEN, "sendMessage", {
-              chat_id: env.TEST_CHANNEL,
-              text: caption,
-              parse_mode: "HTML",
-              disable_web_page_preview: false,
-              reply_markup: replyMarkup
-            });
-          }
+            replyMarkup
+          );
         } else {
-          testRes = await tg(env.BOT_TOKEN, "sendMessage", {
+          const testRes = await tg(env.BOT_TOKEN, "sendMessage", {
             chat_id: env.TEST_CHANNEL,
             text: caption,
             parse_mode: "HTML",
             disable_web_page_preview: false,
             reply_markup: replyMarkup
           });
+          testTelegram = await testRes.json();
         }
-
-        testTelegram = await testRes.json();
         if (testTelegram.ok) {
           record.testMessageId = testTelegram.result.message_id;
           record.testMessageType = cover ? "media" : "text";
@@ -2244,7 +2262,7 @@ async function saveDraft(){
   saveBtn.style.opacity='';
 
   if(data.testTelegram && data.testTelegram.ok===false){
-    setStatus('Məqalə yadda saxlanıldı, amma test kanalına göndərilmədi.','error');
+    setStatus('Məqalə yadda saxlanıldı, amma şəkilli test postu göndərilmədi.','error');
   }else if(data.testTelegram && data.testTelegram.ok){
     setStatus('Yadda saxlanıldı və test kanalına göndərildi ✅','success');
   }else{
@@ -2411,26 +2429,25 @@ ${bodyHtml}
         } catch {}
       }
 
-      let sent;
+      let data;
       if (cover) {
-        sent = await tg(env.BOT_TOKEN, "sendPhoto", {
-          chat_id: env.TEST_CHANNEL,
-          photo: new URL(cover, url.origin).href,
+        data = await tgSendPhotoFromUrl(
+          env.BOT_TOKEN,
+          env.TEST_CHANNEL,
+          new URL(cover, url.origin).href,
           caption,
-          parse_mode: "HTML",
-          reply_markup: replyMarkup
-        });
+          replyMarkup
+        );
       } else {
-        sent = await tg(env.BOT_TOKEN, "sendMessage", {
+        const sent = await tg(env.BOT_TOKEN, "sendMessage", {
           chat_id: env.TEST_CHANNEL,
           text: caption,
           parse_mode: "HTML",
           disable_web_page_preview: false,
           reply_markup: replyMarkup
         });
+        data = await sent.json();
       }
-
-      const data = await sent.json();
       if (!data.ok) return json({ ok: false, telegram: data }, 502);
 
       await cmsPutArticle(env, {
@@ -2619,26 +2636,25 @@ ${bodyHtml}
                 ]
               };
 
-              let posted;
+              let postedData;
               if (cover) {
-                posted = await tg(env.BOT_TOKEN, "sendPhoto", {
-                  chat_id: env.TEST_CHANNEL,
-                  photo: cover,
-                  caption: finalCaption,
-                  parse_mode: "HTML",
-                  reply_markup: replyMarkup
-                });
+                postedData = await tgSendPhotoFromUrl(
+                  env.BOT_TOKEN,
+                  env.TEST_CHANNEL,
+                  new URL(cover, url.origin).href,
+                  finalCaption,
+                  replyMarkup
+                );
               } else {
-                posted = await tg(env.BOT_TOKEN, "sendMessage", {
+                const posted = await tg(env.BOT_TOKEN, "sendMessage", {
                   chat_id: env.TEST_CHANNEL,
                   text: finalCaption,
                   parse_mode: "HTML",
                   disable_web_page_preview: false,
                   reply_markup: replyMarkup
                 });
+                postedData = await posted.json();
               }
-
-              const postedData = await posted.json();
               if (postedData.ok) {
                 record.testMessageId = postedData.result.message_id;
                 record.testMessageType = cover ? "media" : "text";
