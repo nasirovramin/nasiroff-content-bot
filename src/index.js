@@ -1289,92 +1289,60 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
         const articleUrl = `${url.origin}/article/${encodeURIComponent(currentArticleId)}`;
 
         let testTelegram = null;
-        if (old.testMessageId) {
-          const caption = telegramCaptionFromHtml(body.html, articleUrl);
-          const cover = body.html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] || "";
-          const editSig = await makeEditSig(env, currentArticleId, userId);
-          const editUrl = `${url.origin}/edit/${encodeURIComponent(currentArticleId)}?u=${encodeURIComponent(userId)}&sig=${editSig}`;
-          const replyMarkup = {
-            inline_keyboard: [
-              [{ text: "✏️ Edit", url: editUrl }],
-              [
-                { text: "✅ Paylaş", callback_data: `publish:${currentArticleId}` },
-                { text: "🗑 Delete", callback_data: `delete:${currentArticleId}` }
-              ]
+        const caption = telegramCaptionFromHtml(body.html, articleUrl);
+        const cover = body.html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] || "";
+        const editSig = await makeEditSig(env, currentArticleId, userId);
+        const editUrl = `${url.origin}/edit/${encodeURIComponent(currentArticleId)}?u=${encodeURIComponent(userId)}&sig=${editSig}`;
+        const replyMarkup = {
+          inline_keyboard: [
+            [{ text: "✏️ Edit", url: editUrl }],
+            [
+              { text: "✅ Paylaş", callback_data: `publish:${currentArticleId}` },
+              { text: "🗑 Delete", callback_data: `delete:${currentArticleId}` }
             ]
-          };
+          ]
+        };
 
+        if (old.testMessageId) {
           try {
             await tg(env.BOT_TOKEN, "deleteMessage", {
               chat_id: env.TEST_CHANNEL,
               message_id: old.testMessageId
             });
           } catch {}
-
-          let testRes;
-          if (cover) {
-            testRes = await tg(env.BOT_TOKEN, "sendPhoto", {
-              chat_id: env.TEST_CHANNEL,
-              photo: new URL(cover, url.origin).href,
-              caption,
-              parse_mode: "HTML",
-              reply_markup: replyMarkup
-            });
-          } else {
-            testRes = await tg(env.BOT_TOKEN, "sendMessage", {
-              chat_id: env.TEST_CHANNEL,
-              text: caption,
-              parse_mode: "HTML",
-              disable_web_page_preview: false,
-              reply_markup: replyMarkup
-            });
-          }
-
-          testTelegram = await testRes.json();
-          if (testTelegram.ok) {
-            record.testMessageId = testTelegram.result.message_id;
-            record.testMessageType = cover ? "media" : "text";
-            await cmsPutArticle(env, record, currentArticleId);
-          }
         }
 
-        let telegram = null;
-        if (old.mainMessageId) {
-          const caption = telegramCaptionFromHtml(body.html, articleUrl);
-          const method = old.mainMessageType === "text" ? "editMessageText" : "editMessageCaption";
-          const payload = old.mainMessageType === "text"
-            ? {
-                chat_id: env.MAIN_CHANNEL,
-                message_id: old.mainMessageId,
-                text: caption,
-                parse_mode: "HTML",
-                disable_web_page_preview: false
-              }
-            : {
-                chat_id: env.MAIN_CHANNEL,
-                message_id: old.mainMessageId,
-                caption,
-                parse_mode: "HTML"
-              };
-          const r = await tg(env.BOT_TOKEN, method, payload);
-          telegram = await r.json();
+        let testRes;
+        if (cover) {
+          testRes = await tg(env.BOT_TOKEN, "sendPhoto", {
+            chat_id: env.TEST_CHANNEL,
+            photo: new URL(cover, url.origin).href,
+            caption,
+            parse_mode: "HTML",
+            reply_markup: replyMarkup
+          });
+        } else {
+          testRes = await tg(env.BOT_TOKEN, "sendMessage", {
+            chat_id: env.TEST_CHANNEL,
+            text: caption,
+            parse_mode: "HTML",
+            disable_web_page_preview: false,
+            reply_markup: replyMarkup
+          });
         }
 
-        let linkedin = null;
-        if (old.linkedinPostId) {
-          linkedin = await linkedinUpdateTextPost(
-            env,
-            old.linkedinPostId,
-            linkedinCommentaryFromHtml(body.html, articleUrl)
-          );
-          if (linkedin.ok) {
-            record.linkedinLastSyncAt = new Date().toISOString();
-            record.linkedinLastError = null;
-          } else {
-            record.linkedinLastError = linkedin.error || `HTTP ${linkedin.status || "error"}`;
-          }
+        testTelegram = await testRes.json();
+        if (testTelegram.ok) {
+          record.testMessageId = testTelegram.result.message_id;
+          record.testMessageType = cover ? "media" : "text";
+          record.approvalStatus = "pending";
           await cmsPutArticle(env, record, currentArticleId);
         }
+
+        // Save yalnız redaktə edilmiş versiyanı test kanalına göndərir.
+        // Əsas Telegram kanalı və LinkedIn yalnız son təsdiqdən sonra yenilənir.
+        const telegram = null;
+        const linkedin = null;
 
         return json({
           ok: true,
@@ -2002,12 +1970,12 @@ async function saveDraft(){
   saveBtn.disabled=false;
   saveBtn.style.opacity='';
 
-  if(data.telegram && data.telegram.ok===false){
-    setStatus('Məqalə yadda saxlanıldı, Telegram yenilənmədi.','error');
-  }else if(data.telegram && data.telegram.ok){
-    setStatus('Məqalə və Telegram uğurla yeniləndi.','success');
+  if(data.testTelegram && data.testTelegram.ok===false){
+    setStatus('Məqalə yadda saxlanıldı, amma test kanalına göndərilmədi.','error');
+  }else if(data.testTelegram && data.testTelegram.ok){
+    setStatus('Yadda saxlanıldı və test kanalına göndərildi ✅','success');
   }else{
-    setStatus('Məqalə uğurla yadda saxlanıldı.','success');
+    setStatus('Məqalə yadda saxlanıldı, test cavabı alınmadı.','error');
   }
 
   setTimeout(()=>{
