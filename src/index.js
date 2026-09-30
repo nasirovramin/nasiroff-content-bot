@@ -2721,37 +2721,49 @@ function cleanEditorHtml(){
 }
 
 async function saveDraft(){
-  setStatus('Yadda saxlanılır...','neutral');
-  saveBtn.disabled=true;
-  saveBtn.style.opacity='.72';
-  const r=await fetch(API_URL,{
-    method:'POST',
-    headers:{'content-type':'application/json'},
-    body:JSON.stringify({id:'dord-baxis',html:cleanEditorHtml()})
-  });
-  const data=await r.json().catch(()=>({}));
-
-  if(!r.ok||!data.ok){
-    setStatus('Yadda saxlamaq alınmadı.','error');
-    saveBtn.disabled=false;
-    saveBtn.style.opacity='';
-    markDirty();
+  const approved=window.confirm('Dəyişiklikləri yadda saxlayıb yenidən təsdiqə göndərək?');
+  if(!approved){
+    setStatus('Göndərilmədi. Redaktəyə davam edə bilərsiniz.','neutral');
     return;
   }
 
-  markSaved();
-  saveBtn.disabled=false;
-  saveBtn.style.opacity='';
+  setStatus('Yadda saxlanılır və təsdiqə göndərilir...','neutral');
+  saveBtn.disabled=true;
+  saveBtn.style.opacity='.72';
 
-  if(data.testTelegram && data.testTelegram.ok===false){
-    setStatus('Məqalə yadda saxlanıldı, amma şəkilli test postu göndərilmədi.','error');
-  }else if(data.testTelegram && data.testTelegram.ok){
-    setStatus('Yadda saxlanıldı ✅ Test draftı yeniləndi.','success');
-  }else{
-    setStatus('Məqalə yadda saxlanıldı. Test draftını yoxlamaq alınmadı.','error');
+  try{
+    const r=await fetch(API_URL,{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({id:'dord-baxis',html:cleanEditorHtml()})
+    });
+    const data=await r.json().catch(()=>({}));
+
+    if(!r.ok||!data.ok){
+      throw new Error(data.error||('HTTP '+r.status));
+    }
+
+    markSaved();
+
+    if(data.testTelegram && data.testTelegram.ok===false){
+      setStatus('Yadda saxlanıldı, amma təsdiq postunu göndərmək alınmadı.','error');
+      return;
+    }
+
+    if(data.testTelegram && data.testTelegram.ok){
+      setStatus('Təsdiq üçün göndərildi ✅','success');
+      return;
+    }
+
+    setStatus('Yadda saxlanıldı, amma təsdiq postunun statusu alınmadı.','error');
+  }catch(err){
+    console.error('saveDraft failed',err);
+    markDirty();
+    setStatus('Yadda saxlamaq və təsdiqə göndərmək alınmadı. Yenidən cəhd edin.','error');
+  }finally{
+    saveBtn.disabled=false;
+    saveBtn.style.opacity='';
   }
-
-  setStatus('Yadda saxlanıldı ✅ Redaktəyə davam edə bilərsiniz.','success');
 }
 
 enhanceMedia();
