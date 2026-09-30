@@ -608,6 +608,15 @@ function formatAzDate(input = new Date()) {
   return `${day} ${months[Math.max(0, Math.min(11, month - 1))]} ${year}`;
 }
 
+function normalizeArticleMetaDate(html = "", dateInput = null) {
+  if (!dateInput) return String(html);
+  const formatted = formatAzDate(dateInput);
+  return String(html).replace(
+    /(<p\b[^>]*class=["'][^"']*meta[^"']*["'][^>]*>\s*Ramin Nəsirov\s*·\s*)[^<]*(<\/p>)/i,
+    `$1${formatted}$2`
+  );
+}
+
 function removeSourceFooter(html = "") {
   return String(html)
     .replace(/<p>\s*<strong>\s*Mənbə:\s*<\/strong>\s*<a\b[^>]*>\s*Orijinal material\s*<\/a>\s*<\/p>/gi, "")
@@ -2178,7 +2187,10 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
         }
 
         const initialArticle = await cmsGetArticle(env, currentArticleId);
-        const initialEditorHtml = removeSourceFooter(initialArticle?.html || defaultArticleHtml());
+        const initialEditorHtml = normalizeArticleMetaDate(
+          removeSourceFooter(initialArticle?.html || defaultArticleHtml()),
+          initialArticle?.createdAt || initialArticle?.updatedAt || new Date()
+        );
 
         const articleUrl = publicArticleUrl(initialArticle, currentArticleId);
         const previewUrl = `${articleUrl}?preview=1&u=${encodeURIComponent(userId)}&sig=${encodeURIComponent(sig)}`;
