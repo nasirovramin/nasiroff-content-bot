@@ -2030,64 +2030,41 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
         };
 
         const newType = cover ? "media" : "text";
-        const canEditInPlace =
-          !!old.testMessageId &&
-          old.testMessageType === newType &&
-          (newType !== "media" || oldCover === cover);
 
-        if (canEditInPlace) {
-          try {
-            if (newType === "media") {
-              const r = await tg(env.BOT_TOKEN, "editMessageCaption", {
-                chat_id: env.TEST_CHANNEL,
-                message_id: old.testMessageId,
-                caption,
-                parse_mode: "HTML",
-                reply_markup: replyMarkup
-              });
-              testTelegram = await r.json();
-            } else {
-              const r = await tg(env.BOT_TOKEN, "editMessageText", {
-                chat_id: env.TEST_CHANNEL,
-                message_id: old.testMessageId,
-                text: caption,
-                parse_mode: "HTML",
-                disable_web_page_preview: false,
-                reply_markup: replyMarkup
-              });
-              testTelegram = await r.json();
-            }
-          } catch {}
+        // Save basılanda redaktə edilmiş versiya ayrıca yeni təsdiq postu kimi göndərilir.
+        let replacementData = null;
+
+        if (cover) {
+          replacementData = await tgSendPhotoFromUrl(
+            env.BOT_TOKEN,
+            env.TEST_CHANNEL,
+            new URL(cover, url.origin).href,
+            caption,
+            replyMarkup
+          );
         }
 
-        // If the message type/media changed, or in-place edit failed, create a replacement draft.
-        if (!testTelegram?.ok) {
-          let replacementData = null;
+        if (!replacementData?.ok) {
+          const testRes = await tg(env.BOT_TOKEN, "sendMessage", {
+            chat_id: env.TEST_CHANNEL,
+            text: caption,
+            parse_mode: "HTML",
+            disable_web_page_preview: false,
+            reply_markup: replyMarkup
+          });
+          replacementData = await testRes.json();
+        }
 
-          if (cover) {
-            replacementData = await tgSendPhotoFromUrl(
-              env.BOT_TOKEN,
-              env.TEST_CHANNEL,
-              new URL(cover, url.origin).href,
-              caption,
-              replyMarkup
-            );
-          }
+        testTelegram = replacementData;
 
-          if (!replacementData?.ok) {
-            const testRes = await tg(env.BOT_TOKEN, "sendMessage", {
-              chat_id: env.TEST_CHANNEL,
-              text: caption,
-              parse_mode: "HTML",
-              disable_web_page_preview: false,
-              reply_markup: replyMarkup
-            });
-            replacementData = await testRes.json();
-          }
+        if (testTelegram?.ok) {
+          const newMessageId = testTelegram.result?.message_id || null;
+          record.testMessageId = newMessageId || old.testMessageId;
+          record.testMessageType = newType;
+          record.approvalStatus = "pending";
+          await cmsPutArticle(env, record, currentArticleId);
 
-          testTelegram = replacementData;
-
-          if (testTelegram?.ok && old.testMessageId) {
+          if (old.testMessageId && newMessageId && old.testMessageId !== newMessageId) {
             try {
               await tg(env.BOT_TOKEN, "deleteMessage", {
                 chat_id: env.TEST_CHANNEL,
@@ -2096,16 +2073,6 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
             } catch {}
           }
         }
-
-        if (testTelegram?.ok) {
-          record.testMessageId = canEditInPlace && testTelegram.result?.message_id
-            ? testTelegram.result.message_id
-            : (testTelegram.result?.message_id || old.testMessageId);
-          record.testMessageType = newType;
-          record.approvalStatus = "pending";
-          await cmsPutArticle(env, record, currentArticleId);
-        }
-
         // Save yalnız redaktə edilmiş versiyanı test kanalına göndərir.
         // Əsas Telegram kanalı və LinkedIn yalnız son təsdiqdən sonra yenilənir.
         const telegram = null;
@@ -2830,16 +2797,8 @@ markSaved();
           savedArticle?.createdAt || savedArticle?.updatedAt || new Date()
         );
 
-        let backHref = "https://t.me/nasiroff_az";
-        let backLabel = "← Geri qayıt";
-        if (url.searchParams.get("preview") === "1") {
-          const previewUserId = url.searchParams.get("u");
-          const previewSig = url.searchParams.get("sig");
-          if (await validEditSig(env, currentArticleId, previewUserId, previewSig)) {
-            backHref = `${PUBLIC_ORIGIN}/edit/${encodeURIComponent(currentArticleId)}?u=${encodeURIComponent(previewUserId)}&sig=${encodeURIComponent(previewSig)}`;
-            backLabel = "← Geri qayıt";
-          }
-        }
+        const backHref = "https://t.me/nasiroff_az";
+        const backLabel = "← Geri qayıt";
 
         // Köhnə /article/<id> linkləri varsa, təmiz slug ünvanına yönləndir.
         if (publicArticleMatch && savedArticle?.slug) {
