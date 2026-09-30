@@ -590,6 +590,12 @@ function publicArticleUrl(article, articleId) {
 }
 
 
+function removeSourceFooter(html = "") {
+  return String(html)
+    .replace(/<p>\s*<strong>\s*Mənbə:\s*<\/strong>\s*<a\b[^>]*>\s*Orijinal material\s*<\/a>\s*<\/p>/gi, "")
+    .replace(/<p>\s*<strong>\s*Mənbə:\s*<\/strong>[\s\S]*?<\/p>/gi, "");
+}
+
 function renderDraftText(value = "") {
   const raw = String(value);
   let out = "";
@@ -1951,6 +1957,8 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
           return json({ ok: false, error: "invalid_article" }, 400);
         }
 
+        body.html = removeSourceFooter(body.html);
+
         const old = await cmsGetArticle(env, currentArticleId) || {};
         const newMediaKeys = extractMediaKeys(body.html);
         const oldMediaKeys = Array.isArray(old.mediaKeys) ? old.mediaKeys : [];
@@ -2159,7 +2167,7 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
         }
 
         const initialArticle = await cmsGetArticle(env, currentArticleId);
-        const initialEditorHtml = initialArticle?.html || defaultArticleHtml();
+        const initialEditorHtml = removeSourceFooter(initialArticle?.html || defaultArticleHtml());
 
         const articleUrl = publicArticleUrl(initialArticle, currentArticleId);
         const previewUrl = `${articleUrl}?preview=1&u=${encodeURIComponent(userId)}&sig=${encodeURIComponent(sig)}`;
@@ -2779,9 +2787,7 @@ markSaved();
         }
 
         const rawBodyHtml = savedArticle?.html || defaultArticleHtml();
-        const bodyHtml = rawBodyHtml
-          .replace(/<p>\s*<strong>\s*Mənbə:\s*<\/strong>\s*<a\b[^>]*>\s*Orijinal material\s*<\/a>\s*<\/p>/gi, "")
-          .replace(/<p>\s*<strong>\s*Mənbə:\s*<\/strong>[\s\S]*?<\/p>/gi, "");
+        const bodyHtml = removeSourceFooter(rawBodyHtml);
 
         let backHref = "https://t.me/nasiroff_az";
         let backLabel = "← Geri qayıt";
