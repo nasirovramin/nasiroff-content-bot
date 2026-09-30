@@ -38,7 +38,7 @@ async function tgSendPhotoFromUrl(token, chatId, photoUrl, caption, replyMarkup)
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "dedicated-gemini-content-key-v11";
+const BUILD_VERSION = "gemini-3-8-flash-v11";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -858,7 +858,7 @@ async function discoverRelevantSourceItems(env, sourceUrl) {
   }
 
   const compact = candidates.slice(0, 100);
-  const model = env.GEMINI_MODEL || "gemini-3.5-flash";
+  const model = env.GEMINI_MODEL || "gemini-3.8-flash";
   const prompt = `
 Sən dizayn və kreativ industriyası üçün redaktor kimi işləyirsən.
 Aşağıdakı mənbədən çıxarılmış namizəd linklər arasından yalnız həqiqətən faydalı materialları seç.
@@ -922,7 +922,6 @@ ${compact.map((x,i)=>`${i+1}. [${x.title}] ${x.url}${x.publishedAt ? ` | tarix: 
         generationConfig: {
           response_mime_type: "application/json",
           response_schema: schema,
-          temperature: 0.1
         }
       })
     }
@@ -944,8 +943,8 @@ async function geminiDraftFromSource(env, sourceUrl) {
   }
 
   const models = [
-    env.GEMINI_MODEL || "gemini-3.5-flash",
-    env.GEMINI_FALLBACK_MODEL || "gemini-2.5-flash"
+    env.GEMINI_MODEL || "gemini-3.8-flash",
+    env.GEMINI_FALLBACK_MODEL || "gemini-3.7-flash"
   ].filter((x, i, a) => x && a.indexOf(x) === i);
 
   const prompt = `
@@ -1003,7 +1002,6 @@ Qaydalar:
             generationConfig: {
               response_mime_type: "application/json",
               response_schema: schema,
-              temperature: 0.25
             }
           })
         }
@@ -1672,7 +1670,7 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
         return json({ ok: false, configured: false, error: "missing_key" }, 503);
       }
       try {
-        const model = env.GEMINI_MODEL || "gemini-3.5-flash";
+        const model = env.GEMINI_MODEL || "gemini-3.8-flash";
         const r = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
           {
