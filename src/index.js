@@ -2896,6 +2896,68 @@ ${bodyHtml}
       }
 
   
+    if (url.pathname === "/refresh-dord-baxis-link-5a91c2") {
+      const articleId = ARTICLE_ID;
+      let article = await cmsGetArticle(env, articleId);
+      if (!article?.html) {
+        article = {
+          id: articleId,
+          slug: "dord-baxis",
+          html: defaultArticleHtml(),
+          ownerTelegramId: await cmsGetOwnerTelegramId(env),
+          updatedAt: new Date().toISOString()
+        };
+        await cmsPutArticle(env, article, articleId);
+        await cmsPutArticleSlug(env, "dord-baxis", articleId);
+      } else if (article.slug !== "dord-baxis") {
+        article = { ...article, slug: "dord-baxis", updatedAt: new Date().toISOString() };
+        await cmsPutArticle(env, article, articleId);
+        await cmsPutArticleSlug(env, "dord-baxis", articleId);
+      }
+
+      if (!article.testMessageId) {
+        return json({ ok: false, error: "test_message_id_missing", articleUrl: `${PUBLIC_ORIGIN}/dord-baxis` }, 404);
+      }
+
+      const articleUrl = `${PUBLIC_ORIGIN}/dord-baxis`;
+      const caption = telegramCaptionFromHtml(article.html || defaultArticleHtml(), articleUrl);
+      const ownerId = article.ownerTelegramId || await cmsGetOwnerTelegramId(env);
+      const editSig = ownerId ? await makeEditSig(env, articleId, ownerId) : "";
+      const replyMarkup = ownerId ? {
+        inline_keyboard: [
+          [{ text: "✏️ Edit", url: `${PUBLIC_ORIGIN}/edit/${encodeURIComponent(articleId)}?u=${encodeURIComponent(ownerId)}&sig=${editSig}` }],
+          [
+            { text: "✅ Paylaş", callback_data: `publish:${articleId}` },
+            { text: "❌ Yox", callback_data: `reject:${articleId}` }
+          ]
+        ]
+      } : undefined;
+
+      let tgRes;
+      if (article.testMessageType === "text") {
+        tgRes = await tg(env.BOT_TOKEN, "editMessageText", {
+          chat_id: env.TEST_CHANNEL,
+          message_id: article.testMessageId,
+          text: caption,
+          parse_mode: "HTML",
+          disable_web_page_preview: false,
+          ...(replyMarkup ? { reply_markup: replyMarkup } : {})
+        });
+      } else {
+        tgRes = await tg(env.BOT_TOKEN, "editMessageCaption", {
+          chat_id: env.TEST_CHANNEL,
+          message_id: article.testMessageId,
+          caption,
+          parse_mode: "HTML",
+          ...(replyMarkup ? { reply_markup: replyMarkup } : {})
+        });
+      }
+      const data = await tgRes.json();
+      if (!data.ok) return json({ ok: false, telegram: data, articleUrl }, 502);
+
+      return json({ ok: true, articleUrl, messageId: article.testMessageId, telegram: data });
+    }
+
     if (url.pathname === "/resend-latest-test-7f4c91") {
       const latestArticleId = await cmsGetLatestArticleId(env);
       const article = await cmsGetArticle(env, latestArticleId);
