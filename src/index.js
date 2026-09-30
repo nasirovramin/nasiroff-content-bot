@@ -38,7 +38,7 @@ async function tgSendPhotoFromUrl(token, chatId, photoUrl, caption, replyMarkup)
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "save-stays-open-draft-update";
+const BUILD_VERSION = "persistent-edit-after-publish";
 const enc = new TextEncoder();
 const timeoutSignal = (ms) => AbortSignal.timeout(ms);
 
@@ -2987,12 +2987,6 @@ ${bodyHtml}
         });
 
         if (copiedData.ok) {
-          await tg(env.BOT_TOKEN, "editMessageReplyMarkup", {
-            chat_id: msg.chat.id,
-            message_id: msg.message_id,
-            reply_markup: { inline_keyboard: [] }
-          });
-
           const publishedMessageId = copiedData.result.message_id;
           let existing = await cmsGetArticle(env, publishArticleId) || {};
           existing = await repairBrokenArticleCover(env, existing, publishArticleId, url.origin);
@@ -3047,6 +3041,16 @@ ${bodyHtml}
 
           const editSig = await makeEditSig(env, publishArticleId, q.from.id);
           const editUrl = `${url.origin}/edit/${encodeURIComponent(publishArticleId)}?u=${encodeURIComponent(q.from.id)}&sig=${editSig}`;
+
+          // Paylaşılandan sonra test/admin draftında Edit düyməsini saxla.
+          // Əsas ictimai kanalda bu düymə göstərilmir.
+          await tg(env.BOT_TOKEN, "editMessageReplyMarkup", {
+            chat_id: msg.chat.id,
+            message_id: msg.message_id,
+            reply_markup: {
+              inline_keyboard: [[{ text: "✏️ Edit", url: editUrl }]]
+            }
+          });
 
           const linkedinLine = existing.linkedinPostId
             ? "LinkedIn: əvvəlki post saxlanıldı."
