@@ -2207,6 +2207,8 @@ html,body{margin:0;background:#f4f4f4;color:#171717;font-family:-apple-system,Bl
 #editor p{font-size:18px;line-height:1.58;margin:0 0 16px}
 #editor .lead{font-size:25px;line-height:1.23;font-weight:700;margin:0 0 28px}
 #editor a{color:#0b57d0;text-decoration:underline;text-underline-offset:2px}
+.editor-back{display:inline-flex;align-items:center;justify-content:center;margin-top:26px;padding:9px 14px;border:1px solid #a7a7a7;border-radius:999px;color:#171717;text-decoration:none;font-size:14px;font-weight:600}
+.editor-back:hover{border-color:#171717}
 #editor img,#editor video{display:block;width:100%;height:auto;margin:22px 0 28px}.youtube-embed{position:relative;width:100%;aspect-ratio:16/9;margin:22px 0 28px}.youtube-embed iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
 .media-wrap{position:relative;display:block;isolation:isolate}.media-wrap[contenteditable="false"]{user-select:none}
 .media-wrap>img,.media-wrap>video{position:relative;z-index:1}
@@ -2281,6 +2283,7 @@ html,body{margin:0;background:#f4f4f4;color:#171717;font-family:-apple-system,Bl
 <div class="tip">Mətndə istədiyin yerə kursoru qoy, sonra şəkil/video düyməsini bas. Media həmin nöqtəyə əlavə olunacaq.</div>
 <div class="wrap">
   <article id="editor" contenteditable="true">${initialEditorHtml}</article>
+  <a class="editor-back" href="https://t.me/nasiroff_az">← Geri qayıt</a>
 </div>
 <script>
 let savedRange=null;
