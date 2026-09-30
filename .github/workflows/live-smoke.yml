@@ -14,26 +14,19 @@ jobs:
       - name: Check root
         run: |
           set -euxo pipefail
-          curl -i --fail --show-error --silent "https://nasiroff-content-bot.nasirovramin.workers.dev/" | tee /tmp/root.txt
-          grep -q "nasiroff_content_bot is running" /tmp/root.txt
-      - name: Check article
+          curl --fail --show-error --silent "https://nasiroff-content-bot.nasirovramin.workers.dev/" | grep -q "nasiroff_content_bot is running"
+      - name: Check latest build
         run: |
           set -euxo pipefail
-          curl -i --fail --show-error --silent "https://nasiroff-content-bot.nasirovramin.workers.dev/article/dord-baxis" | tee /tmp/article.txt
-          grep -q "Bir layihəyə dörd fərqli baxış" /tmp/article.txt
-      - name: Check LinkedIn debug
+          for i in {1..18}; do
+            V="$(curl --fail --show-error --silent "https://nasiroff-content-bot.nasirovramin.workers.dev/version" || true)"
+            echo "version=$V"
+            if [ "$V" = "async-fast-translation-fix" ]; then exit 0; fi
+            sleep 10
+          done
+          exit 1
+      - name: Check Gemini health
         run: |
           set -euxo pipefail
-          curl --fail --show-error --silent "https://nasiroff-content-bot.nasirovramin.workers.dev/debug/linkedin-latest-4c8e7a" | tee /tmp/linkedin-debug.json
-          cat /tmp/linkedin-debug.json
-      - name: Retry latest LinkedIn post
-        continue-on-error: true
-        run: |
-          set -euxo pipefail
-          curl --show-error --silent -i "https://nasiroff-content-bot.nasirovramin.workers.dev/retry-linkedin-latest-6a2f91" | tee /tmp/linkedin-retry.txt
-          cat /tmp/linkedin-retry.txt
-      - name: Check new CMS build marker
-        continue-on-error: true
-        run: |
-          set -euxo pipefail
-          curl --fail --show-error --silent "https://nasiroff-content-bot.nasirovramin.workers.dev/article/dord-baxis" | grep -q "video"
+          curl --fail --show-error --silent "https://nasiroff-content-bot.nasirovramin.workers.dev/health/gemini" | tee /tmp/gemini-health.json
+          cat /tmp/gemini-health.json
