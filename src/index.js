@@ -38,7 +38,7 @@ async function tgSendPhotoFromUrl(token, chatId, photoUrl, caption, replyMarkup)
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "translation-under-worker-budget";
+const BUILD_VERSION = "long-translation-timeout-fix";
 const enc = new TextEncoder();
 const timeoutSignal = (ms) => AbortSignal.timeout(ms);
 
@@ -989,6 +989,12 @@ async function fetchReadableSourceText(sourceUrl) {
     if (!type.includes("text/html")) return "";
 
     let html = await r.text();
+    const fullHtml = html;
+    const articleMatch = html.match(/<article\b[^>]*>([\s\S]*?)<\/article>/i);
+    const mainMatch = html.match(/<main\b[^>]*>([\s\S]*?)<\/main>/i);
+    if (articleMatch?.[1]) html = articleMatch[1];
+    else if (mainMatch?.[1]) html = mainMatch[1];
+
     html = html
       .replace(/<script\b[\s\S]*?<\/script>/gi, " ")
       .replace(/<style\b[\s\S]*?<\/style>/gi, " ")
@@ -997,7 +1003,7 @@ async function fetchReadableSourceText(sourceUrl) {
       .replace(/<footer\b[\s\S]*?<\/footer>/gi, " ")
       .replace(/<form\b[\s\S]*?<\/form>/gi, " ");
 
-    const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    const titleMatch = fullHtml.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
     const title = titleMatch ? cleanText(titleMatch[1]) : "";
 
     const links = [];
@@ -1038,13 +1044,13 @@ async function geminiDraftFromSource(env, sourceUrl) {
     throw new Error("GEMINI_CONTENT_API_KEY_missing");
   }
 
-  const models = [
-    env.GEMINI_MODEL || "gemini-3.8-flash",
-    "gemini-3.6-flash",
-    "gemini-3.5-flash-lite"
-  ].filter((x, i, a) => x && a.indexOf(x) === i);
-
   const readableSource = await fetchReadableSourceText(sourceUrl);
+  const isLongSource = readableSource.length > 24000;
+  const models = (isLongSource
+    ? ["gemini-3.5-flash-lite", env.GEMINI_MODEL || "gemini-3.8-flash", "gemini-3.6-flash"]
+    : [env.GEMINI_MODEL || "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"]
+  ).filter((x, i, a) => x && a.indexOf(x) === i);
+
   const prompt = `
 Aşağıdakı mənbəni Azərbaycan dilində redaktə oluna bilən jurnal məqaləsinə çevir.
 Mənbə URL: ${sourceUrl}
@@ -1087,12 +1093,8 @@ ${readableSource ? `MƏNBƏNİN MƏTNİ:\n${readableSource}\n\n` : ""}Qaydalar:
   };
 
   let lastError = null;
-  const deadline = Date.now() + 21000;
 
   for (const model of models) {
-    const remaining = deadline - Date.now();
-    if (remaining < 1200) break;
-
     try {
       const r = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
@@ -1108,10 +1110,10 @@ ${readableSource ? `MƏNBƏNİN MƏTNİ:\n${readableSource}\n\n` : ""}Qaydalar:
             generationConfig: {
               response_mime_type: "application/json",
               response_schema: schema,
-              max_output_tokens: 8000
+              max_output_tokens: 10000
             }
           }),
-          signal: timeoutSignal(Math.min(remaining, 20000))
+          signal: timeoutSignal(52000)
         }
       );
 
@@ -1127,12 +1129,14 @@ ${readableSource ? `MƏNBƏNİN MƏTNİ:\n${readableSource}\n\n` : ""}Qaydalar:
 
       lastError = `Gemini_${r.status}_${data?.error?.message || "error"}`;
 
-      // Only try the next model when the service rejected quickly.
+      // Only switch model on fast service-side failures.
       if (![429, 500, 502, 503, 504].includes(r.status)) break;
     } catch (e) {
       lastError = String(e?.message || e);
-      // A timeout consumed the budget; don't let the request hang on more models.
-      if (lastError.includes("timed out") || lastError.includes("Timeout")) break;
+      // If one model actually times out, try one faster fallback instead of failing immediately.
+      if (/timeout|timed out|aborted/i.test(lastError)) {
+        continue;
+      }
     }
   }
 
@@ -1239,7 +1243,7 @@ async function processSourceDraftMessage(env, origin, sourceUrl, userId, chatId)
       chat_id: chatId,
       text: missingKey
         ? "Bu bot üçün Gemini API açarı yoxdur. GEMINI_CONTENT_API_KEY Secret əlavə edilməlidir."
-        : msg.includes("timed out") || msg.includes("Timeout") ? "Tərcümə 30 saniyəlik server limitinə çatdı. Linki bir dəfə də göndərin; sistem sürətli model ilə yenidən cəhd edəcək." : `Tərcümə etmək alınmadı: ${msg.slice(0, 300)}`
+        : /timeout|timed out|aborted/i.test(msg) ? "Tərcümə modeli gec cavab verdi. Sistem digər modelə keçdi, amma hamısı vaxt limitinə düşdü. Bir az sonra linki yenidən göndərin." : `Tərcümə etmək alınmadı: ${msg.slice(0, 300)}`
     });
   }
 }
