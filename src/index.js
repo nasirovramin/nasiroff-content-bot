@@ -642,7 +642,6 @@ function buildArticleHtmlFromDraft(draft, sourceUrl, imageUrl = "") {
   ${media}
   <p class="lead">${lead}</p>
   ${body}
-  <p><strong>Mənbə:</strong> <a href="${escHtml(sourceUrl)}">Orijinal material</a></p>
   `;
 }
 
@@ -2753,7 +2752,21 @@ markSaved();
         if (!savedArticle && currentArticleId !== ARTICLE_ID) {
           return new Response("Məqalə tapılmadı.", { status: 404 });
         }
-        const bodyHtml = savedArticle?.html || defaultArticleHtml();
+        const rawBodyHtml = savedArticle?.html || defaultArticleHtml();
+        const bodyHtml = rawBodyHtml
+          .replace(/<p>\s*<strong>\s*Mənbə:\s*<\/strong>\s*<a\b[^>]*>\s*Orijinal material\s*<\/a>\s*<\/p>/gi, "")
+          .replace(/<p>\s*<strong>\s*Mənbə:\s*<\/strong>[\s\S]*?<\/p>/gi, "");
+
+        let backHref = "https://t.me/nasiroff_az";
+        let backLabel = "← Geri qayıt";
+        if (url.searchParams.get("preview") === "1") {
+          const previewUserId = url.searchParams.get("u");
+          const previewSig = url.searchParams.get("sig");
+          if (await validEditSig(env, currentArticleId, previewUserId, previewSig)) {
+            backHref = `${PUBLIC_ORIGIN}/edit/${encodeURIComponent(currentArticleId)}?u=${encodeURIComponent(previewUserId)}&sig=${encodeURIComponent(previewSig)}`;
+            backLabel = "← Edit rejiminə qayıt";
+          }
+        }
 
         // Köhnə /article/<id> linkləri varsa, təmiz slug ünvanına yönləndir.
         if (publicArticleMatch && savedArticle?.slug && url.searchParams.get("preview") !== "1") {
@@ -2785,7 +2798,9 @@ h2{font-size:24px;line-height:1.22;margin:30px 0 10px;font-weight:600;letter-spa
 p{font-size:18px;line-height:1.58;margin:0 0 16px;font-weight:400}
 img,video{display:block;width:100%;height:auto;margin:22px 0 30px;border-radius:0}.youtube-embed{position:relative;width:100%;aspect-ratio:16/9;margin:22px 0 30px}.youtube-embed iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
 .lead{font-size:25px;line-height:1.23;font-weight:700;letter-spacing:-.02em;margin:0 0 28px}
-main a{color:#0b57d0;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+main a:not(.back){color:#0b57d0;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+.back{display:inline-flex;align-items:center;justify-content:center;margin-top:26px;padding:9px 14px;border:1px solid #a7a7a7;border-radius:999px;color:#171717;text-decoration:none;font-size:14px;font-weight:600}
+.back:hover{border-color:#171717}
 @media(max-width:640px){
   main{padding:22px 18px 52px}
   h1{font-size:36px;line-height:1.06;margin-bottom:10px}
@@ -2794,12 +2809,14 @@ main a{color:#0b57d0;text-decoration:underline;text-underline-offset:2px;cursor:
   p{font-size:16px;line-height:1.55;margin-bottom:14px}
   .lead{font-size:19px;line-height:1.28;margin-bottom:22px}
   img,video{margin-bottom:22px}
+  .back{font-size:13px;padding:8px 12px}
 }
 </style>
 </head>
 <body>
 <main>
 ${bodyHtml}
+<a class="back" href="${backHref}">${backLabel}</a>
 </main>
 </body>
 </html>`;
