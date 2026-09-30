@@ -1,0 +1,17 @@
+name: LinkedIn Retry Latest
+
+on:
+  push:
+    paths:
+      - "linkedin-retry-trigger.txt"
+
+jobs:
+  retry:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for Cloudflare deploy
+        run: sleep 90
+      - name: Retry latest LinkedIn post
+        run: |
+          set -euxo pipefail
+          curl --fail --show-error --silent "https://nasiroff-content-bot.nasirovramin.workers.dev/retry-linkedin-latest-6a2f91"
