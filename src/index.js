@@ -38,8 +38,9 @@ async function tgSendPhotoFromUrl(token, chatId, photoUrl, caption, replyMarkup)
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "async-fast-translation-fix";
+const BUILD_VERSION = "translation-timeout-fallback-fix";
 const enc = new TextEncoder();
+const timeoutSignal = (ms) => AbortSignal.timeout(ms);
 
 const defaultArticleHtml = () => `
   <h1>Bir layihəyə dörd fərqli baxış</h1>
@@ -175,8 +176,9 @@ async function linkedinImageSource(env, imageUrl) {
 
     if (u.pathname === "/media/eyes.jpg") {
       return fetch("https://raw.githubusercontent.com/nasirovramin/nasiroff-content-bot/main.ru/assets/eyes.jpg", {
-        redirect: "follow"
-      });
+        redirect: "follow",
+      signal: timeoutSignal(6000)
+    });
     }
 
     return fetch(imageUrl, { redirect: "follow" });
@@ -601,7 +603,8 @@ async function fetchSourceOgImage(sourceUrl) {
   try {
     const r = await fetch(sourceUrl, {
       headers: { "user-agent": "Mozilla/5.0 NASIROFF-Content-Bot/1.0" },
-      redirect: "follow"
+      redirect: "follow",
+      signal: timeoutSignal(8000)
     });
     if (!r.ok) return null;
     const type = r.headers.get("content-type") || "";
@@ -626,7 +629,8 @@ async function fetchSourcePublicationDate(sourceUrl) {
   try {
     const r = await fetch(sourceUrl, {
       headers: { "user-agent": "Mozilla/5.0 NASIROFF-Content-Bot/1.0" },
-      redirect: "follow"
+      redirect: "follow",
+      signal: timeoutSignal(6000)
     });
     if (!r.ok) return null;
     const type = r.headers.get("content-type") || "";
@@ -687,7 +691,8 @@ async function cacheRemoteImage(env, origin, imageUrl) {
   try {
     const r = await fetch(imageUrl, {
       headers: { "user-agent": "Mozilla/5.0 NASIROFF-Content-Bot/1.0" },
-      redirect: "follow"
+      redirect: "follow",
+      signal: timeoutSignal(6000)
     });
     if (!r.ok) return null;
     const type = r.headers.get("content-type") || "";
@@ -772,7 +777,8 @@ async function extractTelegramArchiveCandidates(sourceUrl) {
 
     const r = await fetch(pageUrl.href, {
       headers: { "user-agent": "Mozilla/5.0 NASIROFF-Content-Bot/1.0" },
-      redirect: "follow"
+      redirect: "follow",
+      signal: timeoutSignal(6000)
     });
     if (!r.ok) break;
 
@@ -831,8 +837,9 @@ async function extractSourceCandidates(sourceUrl) {
 
   const r = await fetch(sourceUrl, {
     headers: { "user-agent": "Mozilla/5.0 NASIROFF-Content-Bot/1.0" },
-    redirect: "follow"
-  });
+    redirect: "follow",
+      signal: timeoutSignal(6000)
+    });
   if (!r.ok) throw new Error(`Source_${r.status}`);
   const type = r.headers.get("content-type") || "";
   if (!type.includes("text/html")) return [];
@@ -950,7 +957,8 @@ async function fetchReadableSourceText(sourceUrl) {
         "user-agent": "Mozilla/5.0 NASIROFF-Content-Bot/1.0",
         "accept": "text/html,application/xhtml+xml"
       },
-      redirect: "follow"
+      redirect: "follow",
+      signal: timeoutSignal(6000)
     });
     if (!r.ok) return "";
     const type = r.headers.get("content-type") || "";
@@ -985,13 +993,8 @@ async function geminiDraftFromSource(env, sourceUrl) {
 
   const models = [
     env.GEMINI_MODEL || "gemini-3.8-flash",
-    env.GEMINI_FALLBACK_MODEL || "gemini-3.7-flash",
     "gemini-3.6-flash",
-    "gemini-3.5-flash",
-    "gemini-3.5-flash-lite",
-    "gemini-3.1-flash-lite",
-    "gemini-3.1-pro-preview",
-    "gemini-3-flash-preview"
+    "gemini-3.5-flash-lite"
   ].filter((x, i, a) => x && a.indexOf(x) === i);
 
   const readableSource = await fetchReadableSourceText(sourceUrl);
@@ -1035,7 +1038,7 @@ ${readableSource ? `MƏNBƏNİN MƏTNİ:\n${readableSource}\n\n` : ""}Qaydalar:
   let lastError = null;
 
   for (const model of models) {
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
       const r = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
         {
@@ -1049,14 +1052,14 @@ ${readableSource ? `MƏNBƏNİN MƏTNİ:\n${readableSource}\n\n` : ""}Qaydalar:
             ...(readableSource ? {} : { tools: [{ url_context: {} }] }),
             generationConfig: {
               response_mime_type: "application/json",
-              response_schema: schema,
+              response_schema: schema
             }
-          })
+          }),
+          signal: timeoutSignal(18000)
         }
       );
 
       const data = await r.json().catch(() => ({}));
-
       if (r.ok) {
         const raw = (data?.candidates?.[0]?.content?.parts || [])
           .map(p => p?.text || "")
@@ -1065,15 +1068,9 @@ ${readableSource ? `MƏNBƏNİN MƏTNİ:\n${readableSource}\n\n` : ""}Qaydalar:
         if (!raw) throw new Error("Gemini_empty_response");
         return JSON.parse(raw);
       }
-
       lastError = `Gemini_${r.status}_${data?.error?.message || "error"}`;
-
-      const retryable = r.status === 429 || r.status === 500 || r.status === 502 || r.status === 503 || r.status === 504;
-      if (!retryable) break;
-
-      if (attempt < 3) {
-        await new Promise(resolve => setTimeout(resolve, attempt * 1200));
-      }
+    } catch (e) {
+      lastError = String(e?.message || e);
     }
   }
 
@@ -1174,7 +1171,7 @@ async function processSourceDraftMessage(env, origin, sourceUrl, userId, chatId)
       chat_id: chatId,
       text: missingKey
         ? "Bu bot üçün Gemini API açarı yoxdur. GEMINI_CONTENT_API_KEY Secret əlavə edilməlidir."
-        : `Tərcümə etmək alınmadı: ${msg.slice(0, 300)}`
+        : msg.includes("timed out") || msg.includes("Timeout") ? "Mənbə gec cavab verdi. Bir dəfə də göndərin, bot başqa sürətli model ilə yenidən yoxlayacaq." : `Tərcümə etmək alınmadı: ${msg.slice(0, 300)}`
     });
   }
 }
