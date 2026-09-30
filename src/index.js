@@ -2813,7 +2813,10 @@ markSaved();
         }
 
         const rawBodyHtml = savedArticle?.html || defaultArticleHtml();
-        const bodyHtml = removeSourceFooter(rawBodyHtml);
+        const bodyHtml = normalizeArticleMetaDate(
+          removeSourceFooter(rawBodyHtml),
+          savedArticle?.createdAt || savedArticle?.updatedAt || new Date()
+        );
 
         let backHref = "https://t.me/nasiroff_az";
         let backLabel = "← Geri qayıt";
