@@ -2106,6 +2106,77 @@ ${bodyHtml}
       }
 
   
+    if (url.pathname === "/resend-latest-test-7f4c91") {
+      const latestArticleId = await cmsGetLatestArticleId(env);
+      const article = await cmsGetArticle(env, latestArticleId);
+      if (!article?.html) return json({ ok: false, error: "latest_article_missing" }, 404);
+
+      const ownerId = article.ownerTelegramId || await cmsGetOwnerTelegramId(env);
+      if (!ownerId) return json({ ok: false, error: "owner_missing" }, 400);
+
+      const articleUrl = `${url.origin}/article/${encodeURIComponent(latestArticleId)}`;
+      const caption = telegramCaptionFromHtml(article.html, articleUrl);
+      const cover = article.html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] || "";
+      const editSig = await makeEditSig(env, latestArticleId, ownerId);
+      const editUrl = `${url.origin}/edit/${encodeURIComponent(latestArticleId)}?u=${encodeURIComponent(ownerId)}&sig=${editSig}`;
+      const replyMarkup = {
+        inline_keyboard: [
+          [{ text: "✏️ Edit", url: editUrl }],
+          [
+            { text: "✅ Paylaş", callback_data: `publish:${latestArticleId}` },
+            { text: "❌ Yox", callback_data: `reject:${latestArticleId}` }
+          ]
+        ]
+      };
+
+      if (article.testMessageId) {
+        try {
+          await tg(env.BOT_TOKEN, "deleteMessage", {
+            chat_id: env.TEST_CHANNEL,
+            message_id: article.testMessageId
+          });
+        } catch {}
+      }
+
+      let sent;
+      if (cover) {
+        sent = await tg(env.BOT_TOKEN, "sendPhoto", {
+          chat_id: env.TEST_CHANNEL,
+          photo: new URL(cover, url.origin).href,
+          caption,
+          parse_mode: "HTML",
+          reply_markup: replyMarkup
+        });
+      } else {
+        sent = await tg(env.BOT_TOKEN, "sendMessage", {
+          chat_id: env.TEST_CHANNEL,
+          text: caption,
+          parse_mode: "HTML",
+          disable_web_page_preview: false,
+          reply_markup: replyMarkup
+        });
+      }
+
+      const data = await sent.json();
+      if (!data.ok) return json({ ok: false, telegram: data }, 502);
+
+      await cmsPutArticle(env, {
+        ...article,
+        testMessageId: data.result.message_id,
+        testMessageType: cover ? "media" : "text",
+        approvalStatus: "pending",
+        updatedAt: new Date().toISOString()
+      }, latestArticleId);
+
+      return json({
+        ok: true,
+        articleId: latestArticleId,
+        messageId: data.result.message_id,
+        testChannel: env.TEST_CHANNEL,
+        telegram: data
+      });
+    }
+
     if (url.pathname === "/publish-latest-telegram-7f4c91") {
       const latestArticleId = await cmsGetLatestArticleId(env);
       const article = await cmsGetArticle(env, latestArticleId);
