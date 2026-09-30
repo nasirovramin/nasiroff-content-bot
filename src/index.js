@@ -2790,7 +2790,7 @@ markSaved();
           const previewSig = url.searchParams.get("sig");
           if (await validEditSig(env, currentArticleId, previewUserId, previewSig)) {
             backHref = `${PUBLIC_ORIGIN}/edit/${encodeURIComponent(currentArticleId)}?u=${encodeURIComponent(previewUserId)}&sig=${encodeURIComponent(previewSig)}`;
-            backLabel = "← Edit rejiminə qayıt";
+            backLabel = "← Geri qayıt";
           }
         }
 
