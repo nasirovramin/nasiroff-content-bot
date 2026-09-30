@@ -1298,7 +1298,7 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
             [{ text: "✏️ Edit", url: editUrl }],
             [
               { text: "✅ Paylaş", callback_data: `publish:${currentArticleId}` },
-              { text: "🗑 Delete", callback_data: `delete:${currentArticleId}` }
+              { text: "❌ Yox", callback_data: `reject:${currentArticleId}` }
             ]
           ]
         };
@@ -2200,7 +2200,7 @@ ${bodyHtml}
       if (text === "/start") {
         await tg(env.BOT_TOKEN, "sendMessage", {
           chat_id: update.message.chat.id,
-          text: "Mənə mənbə linki göndər. Mənbəni skan edib yalnız uyğun dizayn/branding mövzularını seçəcəyəm, hər birini Azərbaycan dilində ayrıca draft hazırlayıb test kanalına göndərəcəyəm. Orada Edit / Paylaş / Delete edə bilərsiniz. Son draftı açmaq üçün /edit yaz."
+          text: "Mənə mənbə linki göndər. Mənbəni skan edib yalnız uyğun dizayn/branding mövzularını seçəcəyəm, hər birini Azərbaycan dilində ayrıca draft hazırlayıb test kanalına göndərəcəyəm. Orada Edit / Paylaş / Yox edə bilərsiniz. Son draftı açmaq üçün /edit yaz."
         });
         return new Response("ok");
       }
@@ -2270,7 +2270,7 @@ ${bodyHtml}
                   [{ text: "✏️ Edit", url: editUrl }],
                   [
                     { text: "✅ Paylaş", callback_data: `publish:${articleId}` },
-                    { text: "🗑 Delete", callback_data: `delete:${articleId}` }
+                    { text: "❌ Yox", callback_data: `reject:${articleId}` }
                   ]
                 ]
               };
@@ -2311,7 +2311,7 @@ ${bodyHtml}
 
           await tg(env.BOT_TOKEN, "sendMessage", {
             chat_id: update.message.chat.id,
-            text: `Mənbə yoxlanıldı ✅\nUyğun yeni draft: ${created}${failed ? `\nHazırlanmayan: ${failed}` : ""}\nHər draft test kanalında ayrıca Edit / Paylaş / Delete ilə göndərildi.`
+            text: `Mənbə yoxlanıldı ✅\nUyğun yeni draft: ${created}${failed ? `\nHazırlanmayan: ${failed}` : ""}\nHər draft test kanalında ayrıca Edit / Paylaş / Yox ilə göndərildi.`
           });
         } catch (e) {
           const missingKey = String(e?.message || "").includes("GEMINI_API_KEY_missing");
@@ -2468,6 +2468,16 @@ ${bodyHtml}
 
       const rejectMatch = String(q.data || "").match(/^reject(?::(.+))?$/);
       if (rejectMatch) {
+        const rejectedArticleId = rejectMatch[1] || ARTICLE_ID;
+        const existing = await cmsGetArticle(env, rejectedArticleId);
+        if (existing) {
+          await cmsPutArticle(env, {
+            ...existing,
+            approvalStatus: "rejected",
+            updatedAt: new Date().toISOString()
+          }, rejectedArticleId);
+        }
+
         await tg(env.BOT_TOKEN, "answerCallbackQuery", {
           callback_query_id: q.id,
           text: "Paylaşım ləğv edildi."
