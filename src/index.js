@@ -38,7 +38,7 @@ async function tgSendPhotoFromUrl(token, chatId, photoUrl, caption, replyMarkup)
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "long-translation-timeout-fix";
+const BUILD_VERSION = "save-stays-open-draft-update";
 const enc = new TextEncoder();
 const timeoutSignal = (ms) => AbortSignal.timeout(ms);
 
@@ -1895,6 +1895,7 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
         let testTelegram = null;
         const caption = telegramCaptionFromHtml(body.html, articleUrl);
         const cover = body.html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] || "";
+        const oldCover = old.html?.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] || "";
         const editSig = await makeEditSig(env, currentArticleId, userId);
         const editUrl = `${url.origin}/edit/${encodeURIComponent(currentArticleId)}?u=${encodeURIComponent(userId)}&sig=${editSig}`;
         const replyMarkup = {
@@ -1907,36 +1908,79 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
           ]
         };
 
-        if (old.testMessageId) {
+        const newType = cover ? "media" : "text";
+        const canEditInPlace =
+          !!old.testMessageId &&
+          old.testMessageType === newType &&
+          (newType !== "media" || oldCover === cover);
+
+        if (canEditInPlace) {
           try {
-            await tg(env.BOT_TOKEN, "deleteMessage", {
-              chat_id: env.TEST_CHANNEL,
-              message_id: old.testMessageId
-            });
+            if (newType === "media") {
+              const r = await tg(env.BOT_TOKEN, "editMessageCaption", {
+                chat_id: env.TEST_CHANNEL,
+                message_id: old.testMessageId,
+                caption,
+                parse_mode: "HTML",
+                reply_markup: replyMarkup
+              });
+              testTelegram = await r.json();
+            } else {
+              const r = await tg(env.BOT_TOKEN, "editMessageText", {
+                chat_id: env.TEST_CHANNEL,
+                message_id: old.testMessageId,
+                text: caption,
+                parse_mode: "HTML",
+                disable_web_page_preview: false,
+                reply_markup: replyMarkup
+              });
+              testTelegram = await r.json();
+            }
           } catch {}
         }
 
-        if (cover) {
-          testTelegram = await tgSendPhotoFromUrl(
-            env.BOT_TOKEN,
-            env.TEST_CHANNEL,
-            new URL(cover, url.origin).href,
-            caption,
-            replyMarkup
-          );
-        } else {
-          const testRes = await tg(env.BOT_TOKEN, "sendMessage", {
-            chat_id: env.TEST_CHANNEL,
-            text: caption,
-            parse_mode: "HTML",
-            disable_web_page_preview: false,
-            reply_markup: replyMarkup
-          });
-          testTelegram = await testRes.json();
+        // If the message type/media changed, or in-place edit failed, create a replacement draft.
+        if (!testTelegram?.ok) {
+          let replacementData = null;
+
+          if (cover) {
+            replacementData = await tgSendPhotoFromUrl(
+              env.BOT_TOKEN,
+              env.TEST_CHANNEL,
+              new URL(cover, url.origin).href,
+              caption,
+              replyMarkup
+            );
+          }
+
+          if (!replacementData?.ok) {
+            const testRes = await tg(env.BOT_TOKEN, "sendMessage", {
+              chat_id: env.TEST_CHANNEL,
+              text: caption,
+              parse_mode: "HTML",
+              disable_web_page_preview: false,
+              reply_markup: replyMarkup
+            });
+            replacementData = await testRes.json();
+          }
+
+          testTelegram = replacementData;
+
+          if (testTelegram?.ok && old.testMessageId) {
+            try {
+              await tg(env.BOT_TOKEN, "deleteMessage", {
+                chat_id: env.TEST_CHANNEL,
+                message_id: old.testMessageId
+              });
+            } catch {}
+          }
         }
-        if (testTelegram.ok) {
-          record.testMessageId = testTelegram.result.message_id;
-          record.testMessageType = cover ? "media" : "text";
+
+        if (testTelegram?.ok) {
+          record.testMessageId = canEditInPlace && testTelegram.result?.message_id
+            ? testTelegram.result.message_id
+            : (testTelegram.result?.message_id || old.testMessageId);
+          record.testMessageType = newType;
           record.approvalStatus = "pending";
           await cmsPutArticle(env, record, currentArticleId);
         }
@@ -2575,19 +2619,12 @@ async function saveDraft(){
   if(data.testTelegram && data.testTelegram.ok===false){
     setStatus('Məqalə yadda saxlanıldı, amma şəkilli test postu göndərilmədi.','error');
   }else if(data.testTelegram && data.testTelegram.ok){
-    setStatus('Yadda saxlanıldı və test kanalına göndərildi ✅','success');
+    setStatus('Yadda saxlanıldı ✅ Test draftı yeniləndi.','success');
   }else{
-    setStatus('Məqalə yadda saxlanıldı, test cavabı alınmadı.','error');
+    setStatus('Məqalə yadda saxlanıldı. Test draftını yoxlamaq alınmadı.','error');
   }
 
-  setTimeout(()=>{
-    window.close();
-    setTimeout(()=>{
-      if(document.visibilityState==='visible'){
-        window.location.replace(window.location.href);
-      }
-    },300);
-  },350);
+  setStatus('Yadda saxlanıldı ✅ Redaktəyə davam edə bilərsiniz.','success');
 }
 
 enhanceMedia();
