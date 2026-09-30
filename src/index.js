@@ -38,7 +38,7 @@ async function tgSendPhotoFromUrl(token, chatId, photoUrl, caption, replyMarkup)
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "photo-fallback-translation-fix";
+const BUILD_VERSION = "full-translation-inline-links";
 const enc = new TextEncoder();
 const timeoutSignal = (ms) => AbortSignal.timeout(ms);
 
@@ -566,9 +566,33 @@ function buildArticleId(title = "") {
   return `${Date.now().toString(36)}-${slugPart(title)}`.slice(0, 54);
 }
 
+
+function renderDraftText(value = "") {
+  const raw = String(value);
+  let out = "";
+  let last = 0;
+  const re = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+  let m;
+  while ((m = re.exec(raw))) {
+    out += escHtml(raw.slice(last, m.index));
+    const label = escHtml(m[1]);
+    let href = "";
+    try {
+      const u = new URL(m[2]);
+      if (u.protocol === "http:" || u.protocol === "https:") href = u.href;
+    } catch {}
+    out += href
+      ? `<a href="${escHtml(href)}" target="_blank" rel="noopener noreferrer">${label}</a>`
+      : escHtml(m[0]);
+    last = re.lastIndex;
+  }
+  out += escHtml(raw.slice(last));
+  return out;
+}
+
 function buildArticleHtmlFromDraft(draft, sourceUrl, imageUrl = "") {
   const title = escHtml(draft?.title || "Yeni məqalə");
-  const lead = escHtml(draft?.lead || "");
+  const lead = renderDraftText(draft?.lead || "");
   const sections = Array.isArray(draft?.sections) ? draft.sections : [];
   const date = new Intl.DateTimeFormat("az-AZ", {
     day: "2-digit", month: "long", year: "numeric", timeZone: "Asia/Baku"
@@ -584,7 +608,7 @@ function buildArticleHtmlFromDraft(draft, sourceUrl, imageUrl = "") {
     const h = heading ? `<h2>${heading}</h2>` : "";
     const p = paragraphs
       .filter(Boolean)
-      .map(x => `<p>${escHtml(x)}</p>`)
+      .map(x => `<p>${renderDraftText(x)}</p>`)
       .join("\n");
     return h + p;
   }).join("\n");
@@ -975,12 +999,35 @@ async function fetchReadableSourceText(sourceUrl) {
 
     const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
     const title = titleMatch ? cleanText(titleMatch[1]) : "";
+
+    const links = [];
+    const seenLinks = new Set();
+    const linkRe = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+    let lm;
+    while ((lm = linkRe.exec(html)) && links.length < 100) {
+      let href;
+      try {
+        href = new URL(lm[1], sourceUrl).href;
+      } catch {
+        continue;
+      }
+      if (!/^https?:/i.test(href) || seenLinks.has(href)) continue;
+      const label = cleanText(lm[2]).replace(/\s+/g, " ").trim();
+      if (label.length < 2 || label.length > 180) continue;
+      seenLinks.add(href);
+      links.push(`[${label}](${href})`);
+    }
+
     const text = cleanText(html)
       .replace(/\s+/g, " ")
       .trim()
-      .slice(0, 42000);
+      .slice(0, 70000);
 
-    return [title, text].filter(Boolean).join("\n\n");
+    const linkBlock = links.length
+      ? `MƏNBƏDƏKİ LİNKLƏR:\n${links.join("\n")}`
+      : "";
+
+    return [title, text, linkBlock].filter(Boolean).join("\n\n");
   } catch {
     return "";
   }
@@ -1007,11 +1054,15 @@ ${readableSource ? `MƏNBƏNİN MƏTNİ:\n${readableSource}\n\n` : ""}Qaydalar:
 - Mətn Azərbaycan dilində sadə, təbii və peşəkar olsun.
 - Brend, şirkət, məhsul, kampaniya, dizayn və texniki terminlərin orijinal adlarını saxla.
 - Sözbəsöz mexaniki tərcümə etmə, mənanı dəqiq qoruyaraq Azərbaycan dilinə uyğunlaşdır.
+- MƏZMUNU QISALTMA. Mənbədə faydalı olan əsas izahları, nümunələri, siyahıları və detalları saxla.
+- Mənbə uzundursa, onu xülasəyə çevirmə. Sadəcə Azərbaycan dilində daha oxunaqlı strukturlaşdır.
+- Mənbə mətnində faydalı linklər varsa onları itirmə. Linki uyğun cümlənin içində [link mətni](https://...) formatında saxla.
+- Yalnız MƏNBƏDƏKİ LİNKLƏR siyahısında verilən URL-lərdən istifadə et. Yeni URL uydurma.
 - Reklam dili, clickbait və lazımsız şişirtmə olmasın.
 - Başlıq qısa və aydın olsun.
 - lead 2-4 cümləlik giriş olsun.
-- Məzmunu 2-6 məntiqli bölməyə ayır.
-- Hər bölmədə 1-4 qısa paraqraf olsun.
+- Məzmunu mənbənin uzunluğuna uyğun 2-12 məntiqli bölməyə ayır.
+- Hər bölmədə lazım olduqca 1-8 paraqraf ola bilər.
 - Yalnız JSON qaytar.
 `;
 
@@ -1052,10 +1103,11 @@ ${readableSource ? `MƏNBƏNİN MƏTNİ:\n${readableSource}\n\n` : ""}Qaydalar:
             ...(readableSource ? {} : { tools: [{ url_context: {} }] }),
             generationConfig: {
               response_mime_type: "application/json",
-              response_schema: schema
+              response_schema: schema,
+              max_output_tokens: 10000
             }
           }),
-          signal: timeoutSignal(18000)
+          signal: timeoutSignal(30000)
         }
       );
 
