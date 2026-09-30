@@ -38,7 +38,7 @@ async function tgSendPhotoFromUrl(token, chatId, photoUrl, caption, replyMarkup)
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "linkedin-retry-v5";
+const BUILD_VERSION = "linkedin-image-debug-v6";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -1485,6 +1485,17 @@ export default {
       const latestArticleId = await cmsGetLatestArticleId(env);
       const article = await cmsGetArticle(env, latestArticleId);
       const media = article?.html ? linkedinMediaUrlsFromHtml(article.html, url.origin) : { images: [], videos: [] };
+      let firstImageStatus = null;
+      let firstImageType = null;
+      if (media.images[0]) {
+        try {
+          const r = await fetch(media.images[0], { redirect: "follow" });
+          firstImageStatus = r.status;
+          firstImageType = r.headers.get("content-type") || null;
+        } catch (e) {
+          firstImageStatus = "fetch_error";
+        }
+      }
       return json({
         connected: !!li?.accessToken,
         usable: linkedinConnectionUsable(li),
@@ -1494,6 +1505,9 @@ export default {
         latestArticleId,
         title: article?.html ? (extractFirst(article.html, "h1") || null) : null,
         imageCount: media.images.length,
+        imageUrls: media.images,
+        firstImageStatus,
+        firstImageType,
         videoCount: media.videos.length,
         linkedinPostId: article?.linkedinPostId || null,
         linkedinLastError: article?.linkedinLastError || null
