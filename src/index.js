@@ -38,7 +38,7 @@ async function tgSendPhotoFromUrl(token, chatId, photoUrl, caption, replyMarkup)
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "linkedin-debug-v4";
+const BUILD_VERSION = "linkedin-retry-v5";
 const enc = new TextEncoder();
 
 const defaultArticleHtml = () => `
@@ -1440,6 +1440,44 @@ export default {
           "cache-control": "no-store"
         }
       });
+    }
+
+    if (url.pathname === "/retry-linkedin-latest-6a2f91") {
+      const latestArticleId = await cmsGetLatestArticleId(env);
+      const article = await cmsGetArticle(env, latestArticleId);
+      if (!article?.html) return json({ ok:false, error:"latest_article_missing" }, 404);
+      if (article.linkedinPostId) {
+        return json({ ok:true, skipped:"already_published", postId:article.linkedinPostId });
+      }
+
+      const articleUrl = `${url.origin}/article/${encodeURIComponent(latestArticleId)}`;
+      const linkedin = await linkedinCreateNativePostFromHtml(
+        env,
+        article.html,
+        url.origin,
+        articleUrl
+      );
+
+      const updated = { ...article, updatedAt:new Date().toISOString() };
+      if (linkedin?.ok) {
+        updated.linkedinPostId = linkedin.postId;
+        updated.linkedinPublishedAt = new Date().toISOString();
+        updated.linkedinLastSyncAt = new Date().toISOString();
+        updated.linkedinLastError = null;
+      } else {
+        updated.linkedinLastError = [
+          linkedin?.error || `HTTP ${linkedin?.status || "error"}`,
+          linkedin?.detail || null,
+          linkedin?.status ? `status=${linkedin.status}` : null
+        ].filter(Boolean).join(" | ").slice(0, 1400);
+      }
+      await cmsPutArticle(env, updated, latestArticleId);
+
+      return json({
+        ok: !!linkedin?.ok,
+        articleId: latestArticleId,
+        linkedin
+      }, linkedin?.ok ? 200 : 502);
     }
 
     if (url.pathname === "/debug/linkedin-latest-4c8e7a") {
