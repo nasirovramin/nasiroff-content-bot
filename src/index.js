@@ -6,8 +6,8 @@ const tg = (token, method, body) =>
   });
 
 
-async function tgSendPhotoFromUrl(token, chatId, photoUrl, caption, replyMarkup) {
-  const src = await fetch(photoUrl, { redirect: "follow" });
+async function tgSendPhotoFromUrl(token, chatId, photoUrl, caption, replyMarkup, env) {
+  const src = env ? await linkedinImageSource(env, photoUrl) : await fetch(photoUrl, { redirect: "follow" });
   if (!src.ok) {
     return { ok: false, error: "photo_source_fetch_failed", status: src.status };
   }
@@ -1260,17 +1260,19 @@ async function processSourceDraftMessage(env, origin, sourceUrl, userId, chatId)
         env.TEST_CHANNEL,
         new URL(cover, origin).href,
         caption,
-        replyMarkup
+        replyMarkup,
+        env
       );
       sentAsMedia = !!postedData?.ok;
     }
 
+    if (cover && !postedData?.ok) throw new Error(`Şəkil göndərilmədi: ${postedData?.description || postedData?.error || "unknown"}`);
     if (!postedData?.ok) {
       const posted = await tg(env.BOT_TOKEN, "sendMessage", {
         chat_id: env.TEST_CHANNEL,
         text: caption,
         parse_mode: "HTML",
-        disable_web_page_preview: false,
+        disable_web_page_preview: true,
         reply_markup: replyMarkup
       });
       postedData = await posted.json();
@@ -2099,16 +2101,18 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
             env.TEST_CHANNEL,
             new URL(cover, url.origin).href,
             caption,
-            replyMarkup
+            replyMarkup,
+            env
           );
         }
 
+        if (cover && !replacementData?.ok) return json({ ok: false, error: `Şəkil göndərilmədi: ${replacementData?.description || replacementData?.error || "unknown"}` }, 502);
         if (!replacementData?.ok) {
           const testRes = await tg(env.BOT_TOKEN, "sendMessage", {
             chat_id: env.TEST_CHANNEL,
             text: caption,
             parse_mode: "HTML",
-            disable_web_page_preview: false,
+            disable_web_page_preview: true,
             reply_markup: replyMarkup
           });
           replacementData = await testRes.json();
@@ -3002,7 +3006,7 @@ ${bodyHtml}
         };
         let result = await (await tg(env.BOT_TOKEN, article.mainMessageType === "text" ? "editMessageText" : "editMessageCaption", {
           ...editBody,
-          ...(article.mainMessageType === "text" ? { text: caption, disable_web_page_preview: false } : { caption })
+          ...(article.mainMessageType === "text" ? { text: caption, disable_web_page_preview: true } : { caption })
         })).json();
         if (!result.ok && /message is not modified/i.test(result.description || "")) result = { ok: true, unchanged: true };
         if (!result.ok) return json({ ok: false, error: result.description, messageId: article.mainMessageId }, 502);
@@ -3050,7 +3054,7 @@ ${bodyHtml}
           message_id: article.testMessageId,
           text: caption,
           parse_mode: "HTML",
-          disable_web_page_preview: false,
+          disable_web_page_preview: true,
           ...(replyMarkup ? { reply_markup: replyMarkup } : {})
         });
       } else {
@@ -3091,15 +3095,6 @@ ${bodyHtml}
         ]
       };
 
-      if (article.testMessageId) {
-        try {
-          await tg(env.BOT_TOKEN, "deleteMessage", {
-            chat_id: env.TEST_CHANNEL,
-            message_id: article.testMessageId
-          });
-        } catch {}
-      }
-
       let data;
       let sentAsMedia = false;
       if (cover) {
@@ -3108,16 +3103,18 @@ ${bodyHtml}
           env.TEST_CHANNEL,
           new URL(cover, url.origin).href,
           caption,
-          replyMarkup
+          replyMarkup,
+          env
         );
         sentAsMedia = !!data?.ok;
       }
+      if (cover && !data?.ok) return json({ ok: false, error: data?.description || data?.error || "photo_send_failed" }, 502);
       if (!data?.ok) {
         const sent = await tg(env.BOT_TOKEN, "sendMessage", {
           chat_id: env.TEST_CHANNEL,
           text: caption,
           parse_mode: "HTML",
-          disable_web_page_preview: false,
+          disable_web_page_preview: true,
           reply_markup: replyMarkup
         });
         data = await sent.json();
@@ -3164,7 +3161,7 @@ ${bodyHtml}
           chat_id: env.MAIN_CHANNEL,
           text: caption,
           parse_mode: "HTML",
-          disable_web_page_preview: false
+          disable_web_page_preview: true
         });
       }
 
@@ -3352,13 +3349,15 @@ ${bodyHtml}
                 const chatId = target.key === "nasiroff" ? env.MAIN_CHANNEL : env.KREADIV_CHANNEL;
                 const field = target.key === "nasiroff" ? "mainMessageId" : "kreadivMessageId";
                 if (!chatId) throw new Error("Kreadiv kanalının ünvanı hələ qoşulmayıb.");
-                result = await (await tg(env.BOT_TOKEN, "copyMessage", {
-                  chat_id: chatId, from_chat_id: msg.chat.id, message_id: msg.message_id,
-                  reply_markup: { inline_keyboard: [] }
-                })).json();
+                const articleUrl = publicArticleUrl(record, state.articleId);
+                const caption = telegramCaptionFromHtml(record.html, articleUrl);
+                const cover = record.html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1];
+                result = cover
+                  ? await tgSendPhotoFromUrl(env.BOT_TOKEN, chatId, new URL(cover, PUBLIC_ORIGIN).href, caption, { inline_keyboard: [] }, env)
+                  : await (await tg(env.BOT_TOKEN, "sendMessage", { chat_id: chatId, text: caption, parse_mode: "HTML", link_preview_options: { is_disabled: true } })).json();
                 if (result.ok) {
                   record[field] = result.result.message_id;
-                  if (target.key === "nasiroff") record.mainMessageType = msg.photo?.length ? "media" : "text";
+                  if (target.key === "nasiroff") record.mainMessageType = cover ? "media" : "text";
                 }
               }
               await publishMenuAction(env, msg, q.from.id, "result", { target: target.key, result });
