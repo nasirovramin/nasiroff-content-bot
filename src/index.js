@@ -106,9 +106,9 @@ function extractFirst(html, tag, className = "") {
   return m ? cleanText(m[1]) : "";
 }
 
-function telegramCaptionFromHtml(html, articleUrl) {
+function telegramCaptionFromHtml(html, articleUrl, customDescription = "") {
   const title = extractFirst(html, "h1") || ARTICLE_TITLE;
-  let description = extractFirst(html, "p", "lead");
+  let description = customDescription || extractFirst(html, "p", "lead");
 
   if (!description) {
     const paragraphs = [];
@@ -1238,7 +1238,7 @@ async function processSourceDraftMessage(env, origin, sourceUrl, userId, chatId)
     const sig = await makeEditSig(env, articleId, userId);
     const editUrl = `${PUBLIC_ORIGIN}/edit/${encodeURIComponent(articleId)}?u=${encodeURIComponent(userId)}&sig=${sig}`;
     const articleUrl = publicArticleUrl(record, articleId);
-    const caption = telegramCaptionFromHtml(record.html, articleUrl);
+    const caption = telegramCaptionFromHtml(record.html, articleUrl, record.telegramDescription);
     const cover = record.html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] || "";
 
     const replyMarkup = {
@@ -2075,7 +2075,7 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
         const articleUrl = publicArticleUrl(record, currentArticleId);
 
         let testTelegram = null;
-        const caption = telegramCaptionFromHtml(body.html, articleUrl);
+        const caption = telegramCaptionFromHtml(body.html, articleUrl, record.telegramDescription);
         const cover = body.html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] || "";
         const oldCover = old.html?.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] || "";
         const editSig = await makeEditSig(env, currentArticleId, userId);
@@ -2996,9 +2996,11 @@ ${bodyHtml}
         return json({ ok: true, messageId: result.result.message_id, channel: env.KREADIV_CHANNEL, articleUrl: publicArticleUrl(article, articleId) });
       }
       if (url.searchParams.get("target") === "main") {
+        const description = url.searchParams.get("description");
+        if (description && article) article.telegramDescription = description.slice(0, 420);
         if (!article?.html || !article.mainMessageId) return json({ ok: false, error: "published_message_missing" }, 404);
         const articleUrl = publicArticleUrl(article, articleId);
-        const caption = telegramCaptionFromHtml(article.html, articleUrl);
+        const caption = telegramCaptionFromHtml(article.html, articleUrl, article.telegramDescription);
         const editBody = {
           chat_id: env.MAIN_CHANNEL,
           message_id: article.mainMessageId,
@@ -3086,7 +3088,7 @@ ${bodyHtml}
       if (!ownerId) return json({ ok: false, error: "owner_missing" }, 400);
 
       const articleUrl = publicArticleUrl(article, latestArticleId);
-      const caption = telegramCaptionFromHtml(article.html, articleUrl);
+      const caption = telegramCaptionFromHtml(article.html, articleUrl, article.telegramDescription);
       const cover = article.html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] || "";
       const editSig = await makeEditSig(env, latestArticleId, ownerId);
       const editUrl = `${PUBLIC_ORIGIN}/edit/${encodeURIComponent(latestArticleId)}?u=${encodeURIComponent(ownerId)}&sig=${editSig}`;
@@ -3150,7 +3152,7 @@ ${bodyHtml}
       if (!article?.html) return json({ ok: false, error: "latest_article_missing" }, 404);
 
       const articleUrl = publicArticleUrl(article, latestArticleId);
-      const caption = telegramCaptionFromHtml(article.html, articleUrl);
+      const caption = telegramCaptionFromHtml(article.html, articleUrl, article.telegramDescription);
       const cover = article.html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] || "";
 
       let sent;
@@ -3355,7 +3357,7 @@ ${bodyHtml}
                 const field = target.key === "nasiroff" ? "mainMessageId" : "kreadivMessageId";
                 if (!chatId) throw new Error("Kreadiv kanalının ünvanı hələ qoşulmayıb.");
                 const articleUrl = publicArticleUrl(record, state.articleId);
-                const caption = telegramCaptionFromHtml(record.html, articleUrl);
+                const caption = telegramCaptionFromHtml(record.html, articleUrl, record.telegramDescription);
                 const cover = record.html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1];
                 result = cover
                   ? await tgSendPhotoFromUrl(env.BOT_TOKEN, chatId, new URL(cover, PUBLIC_ORIGIN).href, caption, { inline_keyboard: [] }, env)
