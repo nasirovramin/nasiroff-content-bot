@@ -608,7 +608,16 @@ function formatAzDate(input = new Date()) {
   return `${day} ${months[Math.max(0, Math.min(11, month - 1))]} ${year}`;
 }
 
+function normalizeMediaParagraphs(html = "") {
+  return String(html).replace(/<p\b([^>]*)>([\s\S]*?)<\/p>/gi, (original, attrs, content) => {
+    if (!/<div\b[^>]*class=["'][^"']*media-wrap/i.test(content)) return original;
+    const parts = content.split(/(<div\b[^>]*class=["'][^"']*media-wrap[^"']*["'][^>]*>[\s\S]*?<\/div>)/gi);
+    return parts.map(part => /^<div\b/i.test(part) ? part : part.trim() ? `<p${attrs}>${part}</p>` : "").join("");
+  });
+}
+
 function normalizeArticleMetaDate(html = "", dateInput = null) {
+  html = normalizeMediaParagraphs(html);
   html = String(html).replace(
     /https:\/\/nasiroff-content-bot\.nasirovramin\.workers\.dev(?=\/(?:media-store|media)\/)/g,
     PUBLIC_ORIGIN
@@ -2038,7 +2047,7 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
           return json({ ok: false, error: "invalid_article" }, 400);
         }
 
-        body.html = removeSourceFooter(body.html);
+        body.html = normalizeMediaParagraphs(removeSourceFooter(body.html));
 
         const old = await cmsGetArticle(env, currentArticleId) || {};
         const newMediaKeys = extractMediaKeys(body.html);
@@ -2982,6 +2991,14 @@ ${bodyHtml}
     if (url.pathname === "/refresh-dord-baxis-link-5a91c2") {
       const articleId = url.searchParams.get("article") === "latest" ? await cmsGetLatestArticleId(env) : ARTICLE_ID;
       let article = await cmsGetArticle(env, articleId);
+      if (url.searchParams.get("target") === "repair-portfolio-paragraphs") {
+        const portfolioId = await cmsGetArticleIdBySlug(env, "ugurlu-portfolio");
+        const portfolio = portfolioId ? await cmsGetArticle(env, portfolioId) : null;
+        if (!portfolio?.html) return json({ ok: false, error: "portfolio_missing" }, 404);
+        const html = normalizeMediaParagraphs(portfolio.html);
+        await cmsPutArticle(env, { ...portfolio, html }, portfolioId);
+        return json({ ok: true, changed: html !== portfolio.html, articleUrl: publicArticleUrl(portfolio, portfolioId) });
+      }
       if (url.searchParams.get("target") === "align-left") {
         if (!article?.html) return json({ ok: false, error: "article_missing" }, 404);
         article.html = article.html.replace(/<(p|h[1-4]|li|blockquote)\b([^>]*)>/gi, (tag, name, attrs) => {
