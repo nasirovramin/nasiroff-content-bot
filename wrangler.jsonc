@@ -4,6 +4,7 @@
   "compatibility_date": "2026-09-28",
   "vars": {
     "MAIN_CHANNEL": "@nasiroff_az",
+    "KREADIV_CHANNEL": "@Kreadiv",
     "TEST_CHANNEL": "-1004409605326",
     "LINKEDIN_CLIENT_ID": "77gwspydjipodn"
   },
