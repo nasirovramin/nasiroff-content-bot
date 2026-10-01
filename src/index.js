@@ -38,7 +38,7 @@ async function tgSendPhotoFromUrl(token, chatId, photoUrl, caption, replyMarkup)
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "select-publish-destinations-v1";
+const BUILD_VERSION = "domain-media-telegram-return-v2";
 const PUBLIC_ORIGIN = "https://blog.raminnasiroff.com";
 const enc = new TextEncoder();
 const timeoutSignal = (ms) => AbortSignal.timeout(ms);
@@ -609,6 +609,10 @@ function formatAzDate(input = new Date()) {
 }
 
 function normalizeArticleMetaDate(html = "", dateInput = null) {
+  html = String(html).replace(
+    /https:\/\/nasiroff-content-bot\.nasirovramin\.workers\.dev(?=\/(?:media-store|media)\/)/g,
+    PUBLIC_ORIGIN
+  );
   if (!dateInput) return String(html);
   const formatted = formatAzDate(dateInput);
   return String(html).replace(
@@ -2898,7 +2902,7 @@ main a:not(.back){color:#0b57d0;text-decoration:underline;text-underline-offset:
 <body>
 <main>
 ${bodyHtml}
-<a class="back" href="${backHref}">${backLabel}</a>
+<a class="back" href="${backHref}" target="_blank" rel="noopener noreferrer">${backLabel}</a>
 </main>
 </body>
 </html>`;
