@@ -2944,6 +2944,24 @@ ${bodyHtml}
     if (url.pathname === "/refresh-dord-baxis-link-5a91c2") {
       const articleId = ARTICLE_ID;
       let article = await cmsGetArticle(env, articleId);
+      if (url.searchParams.get("target") === "main") {
+        if (!article?.html || !article.mainMessageId) return json({ ok: false, error: "published_message_missing" }, 404);
+        const articleUrl = publicArticleUrl(article, articleId);
+        const caption = telegramCaptionFromHtml(article.html, articleUrl);
+        const editBody = {
+          chat_id: env.MAIN_CHANNEL,
+          message_id: article.mainMessageId,
+          parse_mode: "HTML"
+        };
+        let result = await (await tg(env.BOT_TOKEN, article.mainMessageType === "text" ? "editMessageText" : "editMessageCaption", {
+          ...editBody,
+          ...(article.mainMessageType === "text" ? { text: caption, disable_web_page_preview: false } : { caption })
+        })).json();
+        if (!result.ok && /message is not modified/i.test(result.description || "")) result = { ok: true, unchanged: true };
+        if (!result.ok) return json({ ok: false, error: result.description, messageId: article.mainMessageId }, 502);
+        await cmsPutArticle(env, { ...article, mainArticleUrl: articleUrl, updatedAt: new Date().toISOString() }, articleId);
+        return json({ ok: true, articleUrl, messageId: article.mainMessageId, telegram: result });
+      }
       if (!article?.html) {
         article = {
           id: articleId,
