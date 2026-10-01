@@ -38,7 +38,7 @@ async function tgSendPhotoFromUrl(token, chatId, photoUrl, caption, replyMarkup)
 
 const ARTICLE_ID = "dord-baxis";
 const ARTICLE_TITLE = "Bir layihəyə dörd fərqli baxış";
-const BUILD_VERSION = "persistent-edit-after-publish";
+const BUILD_VERSION = "select-publish-destinations-v1";
 const PUBLIC_ORIGIN = "https://blog.raminnasiroff.com";
 const enc = new TextEncoder();
 const timeoutSignal = (ms) => AbortSignal.timeout(ms);
@@ -1502,6 +1502,31 @@ async function cmsDeleteLinkedInState(env) {
   return cmsStub(env).fetch("https://cms.internal/linkedin-state", { method: "DELETE" });
 }
 
+const PUBLISH_TARGETS = [
+  { key: "nasiroff", label: "Nasiroff kanal", bit: 1 },
+  { key: "kreadiv", label: "Kreadiv kanal", bit: 2 },
+  { key: "linkedin", label: "LinkedIn", bit: 4 }
+];
+
+function publishMenuMarkup(mask) {
+  return { inline_keyboard: [
+    ...PUBLISH_TARGETS.map(target => [{
+      text: `${mask & target.bit ? "✅" : "☐"} ${target.label}`,
+      callback_data: `dest:${target.bit}`
+    }]),
+    [{ text: "OK", callback_data: "dest:ok" }]
+  ] };
+}
+
+async function publishMenuAction(env, msg, userId, action, extra = {}) {
+  const response = await cmsStub(env).fetch("https://cms.internal/publish-menu", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ chatId: msg.chat.id, messageId: msg.message_id, userId, action, ...extra })
+  });
+  return response.json();
+}
+
 export class CmsStore {
   constructor(ctx, env) {
     this.ctx = ctx;
@@ -1510,6 +1535,36 @@ export class CmsStore {
 
   async fetch(request) {
     const url = new URL(request.url);
+
+    if (url.pathname === "/publish-menu" && request.method === "POST") {
+      const data = await request.json();
+      const key = `publish-menu:${data.chatId}:${data.messageId}`;
+      const result = await this.ctx.storage.transaction(async storage => {
+        let state = await storage.get(key);
+        if (data.action === "open" && !state) {
+          state = { articleId: data.articleId, userId: data.userId, mask: 0, results: {} };
+        }
+        if (!state || state.userId !== data.userId) return { error: "Bu menyu başqa istifadəçiyə aiddir." };
+        if (data.action === "open" || data.action === "toggle") {
+          if (state.processing) return { error: "Paylaşım davam edir." };
+          if (data.action === "toggle") {
+            if (![1, 2, 4].includes(data.bit)) return { error: "Yanlış seçim." };
+            state.mask ^= data.bit;
+          }
+        } else if (data.action === "claim") {
+          if (state.processing) return { error: "Paylaşım davam edir." };
+          if (!state.mask) return { error: "Ən azı bir kanal seçin." };
+          state.processing = true;
+        } else if (data.action === "result") {
+          state.results[data.target] = data.result;
+        } else if (data.action === "finish") {
+          state.processing = false;
+        }
+        await storage.put(key, state);
+        return state;
+      });
+      return json(result);
+    }
 
     if (url.pathname === "/article" || url.pathname.startsWith("/article/")) {
       const articleId = url.pathname === "/article"
@@ -3175,105 +3230,87 @@ ${bodyHtml}
       const msg = q.message;
 
       const publishMatch = String(q.data || "").match(/^publish(?::(.+))?$/);
-      if (publishMatch) {
-        const publishArticleId = publishMatch[1] || ARTICLE_ID;
-        const copied = await tg(env.BOT_TOKEN, "copyMessage", {
-          chat_id: env.MAIN_CHANNEL,
-          from_chat_id: msg.chat.id,
-          message_id: msg.message_id
+      const destinationMatch = String(q.data || "").match(/^dest:(1|2|4|ok)$/);
+      if (publishMatch || destinationMatch) {
+        // Only channel administrators may open or confirm a publishing menu.
+        if (!msg || String(msg.chat.id) !== String(env.TEST_CHANNEL)) return new Response("ok");
+        const membership = await (await tg(env.BOT_TOKEN, "getChatMember", {
+          chat_id: msg.chat.id, user_id: q.from.id
+        })).json();
+        if (!membership.ok || !["creator", "administrator"].includes(membership.result?.status)) {
+          await tg(env.BOT_TOKEN, "answerCallbackQuery", { callback_query_id: q.id, text: "Yalnız administrator paylaşa bilər.", show_alert: true });
+          return new Response("ok");
+        }
+        const action = publishMatch ? "open" : destinationMatch[1] === "ok" ? "claim" : "toggle";
+        const state = await publishMenuAction(env, msg, q.from.id, action, {
+          articleId: publishMatch?.[1] || ARTICLE_ID,
+          bit: Number(destinationMatch?.[1])
         });
-        const copiedData = await copied.json();
-
         await tg(env.BOT_TOKEN, "answerCallbackQuery", {
           callback_query_id: q.id,
-          text: copiedData.ok ? "Əsas kanalda paylaşıldı ✅" : "Paylaşmaq alınmadı ❌"
+          text: state.error || (action === "claim" ? "Seçilmiş kanallarda paylaşılır…" : "Paylaşılacaq kanalları seçin"),
+          show_alert: !!state.error
         });
-
-        if (copiedData.ok) {
-          const publishedMessageId = copiedData.result.message_id;
-          let existing = await cmsGetArticle(env, publishArticleId) || {};
-          existing = await repairBrokenArticleCover(env, existing, publishArticleId, url.origin);
-          const articleHtml = existing.html || defaultArticleHtml();
-          const articleUrl = publicArticleUrl(existing, publishArticleId);
-
-          let linkedin = null;
-          if (!existing.linkedinPostId) {
-            linkedin = await linkedinCreateNativePostFromHtml(
-              env,
-              articleHtml,
-              url.origin,
-              articleUrl
-            );
-          }
-
-          const record = {
-            ...existing,
-            id: publishArticleId,
-            slug: publishArticleId,
-            html: articleHtml,
-            mediaKeys: existing.mediaKeys || [],
-            mainMessageId: publishedMessageId,
-            mainMessageType: msg.photo?.length ? "media" : "text",
-            publishedAt: existing.publishedAt || new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          };
-
-          if (linkedin?.ok) {
-            record.linkedinPostId = linkedin.postId;
-            record.linkedinPostUrl = linkedinPostUrl(linkedin.postId);
-            record.linkedinPublishedAt = new Date().toISOString();
-            record.linkedinLastSyncAt = new Date().toISOString();
-            record.linkedinLastError = null;
-          } else if (existing.linkedinPostId) {
-            record.linkedinPostUrl = existing.linkedinPostUrl || linkedinPostUrl(existing.linkedinPostId);
-          } else if (linkedin && !linkedin.ok) {
-            record.linkedinLastError = [
-              linkedin.error || `HTTP ${linkedin.status || "error"}`,
-              linkedin.detail || null,
-              linkedin.status ? `status=${linkedin.status}` : null
-            ].filter(Boolean).join(" | ").slice(0, 1400);
-          }
-
-          await cmsPutArticle(env, record, publishArticleId);
-
-          await tg(env.BOT_TOKEN, "copyMessage", {
-            chat_id: q.from.id,
-            from_chat_id: env.MAIN_CHANNEL,
-            message_id: publishedMessageId
-          });
-
-          const editSig = await makeEditSig(env, publishArticleId, q.from.id);
-          const editUrl = `${PUBLIC_ORIGIN}/edit/${encodeURIComponent(publishArticleId)}?u=${encodeURIComponent(q.from.id)}&sig=${editSig}`;
-
-          // Paylaşılandan sonra test/admin draftında Edit düyməsini saxla.
-          // Əsas ictimai kanalda bu düymə göstərilmir.
+        if (state.error) return new Response("ok");
+        if (action !== "claim") {
+          const editSig = await makeEditSig(env, state.articleId, q.from.id);
+          const markup = publishMenuMarkup(state.mask);
+          markup.inline_keyboard.push([{ text: "✏️ Edit", url: `${PUBLIC_ORIGIN}/edit/${encodeURIComponent(state.articleId)}?u=${q.from.id}&sig=${editSig}` }]);
           await tg(env.BOT_TOKEN, "editMessageReplyMarkup", {
-            chat_id: msg.chat.id,
-            message_id: msg.message_id,
-            reply_markup: {
-              inline_keyboard: [[{ text: "✏️ Edit", url: editUrl }]]
-            }
+            chat_id: msg.chat.id, message_id: msg.message_id, reply_markup: markup
           });
-
-          const linkedinLine = existing.linkedinPostId
-            ? "LinkedIn: əvvəlki post saxlanıldı."
-            : linkedin?.ok
-              ? "LinkedIn: paylaşıldı ✅"
-              : `LinkedIn: paylaşılmadı ⚠️\nSəbəb: ${(record.linkedinLastError || "naməlum xəta").slice(0, 320)}`;
-
-          const actionButtons = [{ text: "✏️ Edit", url: editUrl }];
-          const linkedInUrl = record.linkedinPostUrl || linkedinPostUrl(record.linkedinPostId);
-          if (linkedInUrl) actionButtons.push({ text: "🔗 LinkedIn-də bax", url: linkedInUrl });
-
-          await tg(env.BOT_TOKEN, "sendMessage", {
-            chat_id: q.from.id,
-            text: `✅ Telegram-da paylaşıldı.\n${linkedinLine}\nPost ID: ${publishedMessageId}`,
-            reply_markup: {
-              inline_keyboard: [actionButtons]
-            }
-          });
+          return new Response("ok");
         }
-
+        const lines = [];
+        try {
+          let record = await cmsGetArticle(env, state.articleId);
+          if (!record) throw new Error("Məqalə tapılmadı. Yenidən draft yaradın.");
+          record = await repairBrokenArticleCover(env, record, state.articleId, url.origin);
+          for (const target of PUBLISH_TARGETS.filter(target => state.mask & target.bit)) {
+            if (state.results[target.key]?.ok) {
+              lines.push(`✅ ${target.label}: artıq paylaşılıb`);
+              continue;
+            }
+            try {
+              let result;
+              if (target.key === "linkedin") {
+                result = record.linkedinPostId
+                  ? { ok: true, postId: record.linkedinPostId }
+                  : await linkedinCreateNativePostFromHtml(env, record.html, url.origin, publicArticleUrl(record, state.articleId));
+                if (result.ok) {
+                  record.linkedinPostId = result.postId;
+                  record.linkedinPostUrl = linkedinPostUrl(result.postId);
+                  record.linkedinPublishedAt = record.linkedinPublishedAt || new Date().toISOString();
+                  record.linkedinLastError = null;
+                } else record.linkedinLastError = result.error || result.detail || "Paylaşmaq alınmadı";
+              } else {
+                const chatId = target.key === "nasiroff" ? env.MAIN_CHANNEL : env.KREADIV_CHANNEL;
+                const field = target.key === "nasiroff" ? "mainMessageId" : "kreadivMessageId";
+                if (!chatId) throw new Error("Kreadiv kanalının ünvanı hələ qoşulmayıb.");
+                result = await (await tg(env.BOT_TOKEN, "copyMessage", {
+                  chat_id: chatId, from_chat_id: msg.chat.id, message_id: msg.message_id,
+                  reply_markup: { inline_keyboard: [] }
+                })).json();
+                if (result.ok) {
+                  record[field] = result.result.message_id;
+                  if (target.key === "nasiroff") record.mainMessageType = msg.photo?.length ? "media" : "text";
+                }
+              }
+              await publishMenuAction(env, msg, q.from.id, "result", { target: target.key, result });
+              if (result.ok) record.publishedAt = record.publishedAt || new Date().toISOString();
+              record.updatedAt = new Date().toISOString();
+              await cmsPutArticle(env, record, state.articleId);
+              lines.push(result.ok ? `✅ ${target.label}: paylaşıldı` : `❌ ${target.label}: ${String(result.description || result.error || "Paylaşmaq alınmadı").slice(0, 250)}`);
+            } catch (error) {
+              lines.push(`❌ ${target.label}: ${String(error.message).slice(0, 250)}`);
+            }
+          }
+        } catch (error) {
+          lines.push(`❌ ${String(error.message).slice(0, 250)}`);
+        } finally {
+          await publishMenuAction(env, msg, q.from.id, "finish");
+        }
+        await tg(env.BOT_TOKEN, "sendMessage", { chat_id: q.from.id, text: lines.join("\n") });
         return new Response("ok");
       }
 
