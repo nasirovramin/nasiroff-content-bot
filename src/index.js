@@ -2980,7 +2980,7 @@ ${bodyHtml}
 
   
     if (url.pathname === "/refresh-dord-baxis-link-5a91c2") {
-      const articleId = ARTICLE_ID;
+      const articleId = url.searchParams.get("article") === "latest" ? await cmsGetLatestArticleId(env) : ARTICLE_ID;
       let article = await cmsGetArticle(env, articleId);
       if (url.searchParams.get("target") === "kreadiv") {
         if (!article?.mainMessageId || !env.KREADIV_CHANNEL) return json({ ok: false, error: "published_message_or_channel_missing" }, 404);
@@ -3004,13 +3004,18 @@ ${bodyHtml}
           message_id: article.mainMessageId,
           parse_mode: "HTML"
         };
-        let result = await (await tg(env.BOT_TOKEN, article.mainMessageType === "text" ? "editMessageText" : "editMessageCaption", {
+        const nativePhoto = url.searchParams.get("photo");
+        let result = nativePhoto ? await (await tg(env.BOT_TOKEN, "editMessageMedia", {
+          chat_id: env.MAIN_CHANNEL, message_id: article.mainMessageId,
+          media: { type: "photo", media: nativePhoto, caption, parse_mode: "HTML" },
+          reply_markup: { inline_keyboard: [] }
+        })).json() : await (await tg(env.BOT_TOKEN, article.mainMessageType === "text" ? "editMessageText" : "editMessageCaption", {
           ...editBody,
           ...(article.mainMessageType === "text" ? { text: caption, disable_web_page_preview: true } : { caption })
         })).json();
         if (!result.ok && /message is not modified/i.test(result.description || "")) result = { ok: true, unchanged: true };
         if (!result.ok) return json({ ok: false, error: result.description, messageId: article.mainMessageId }, 502);
-        await cmsPutArticle(env, { ...article, mainArticleUrl: articleUrl, updatedAt: new Date().toISOString() }, articleId);
+        await cmsPutArticle(env, { ...article, mainArticleUrl: articleUrl, mainMessageType: nativePhoto ? "media" : article.mainMessageType, updatedAt: new Date().toISOString() }, articleId);
         return json({ ok: true, articleUrl, messageId: article.mainMessageId, telegram: result });
       }
       if (!article?.html) {
