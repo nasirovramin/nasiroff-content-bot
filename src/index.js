@@ -2247,7 +2247,7 @@ html,body{margin:0;background:#f4f4f4;color:#171717;font-family:-apple-system,Bl
 #editor .meta:after{content:"";height:1px;background:#aaa;flex:1}
 #editor h2{font-size:24px;line-height:1.22;margin:30px 0 10px;font-weight:600}
 #editor p{font-size:18px;line-height:1.52;margin:0 0 16px}
-#editor p:not(.meta){text-align:left}
+#editor p:not(.meta){text-align:left;word-break:normal;overflow-wrap:normal;-webkit-hyphens:none;hyphens:none}
 #editor .lead{font-size:25px;line-height:1.23;font-weight:700;margin:0 0 28px}
 #editor a{color:#0b57d0;text-decoration:underline;text-underline-offset:2px}
 .editor-back{display:inline-flex;align-items:center;justify-content:center;margin-top:26px;padding:9px 14px;border:1px solid #a7a7a7;border-radius:999px;color:#171717;text-decoration:none;font-size:14px;font-weight:600}
@@ -2884,7 +2884,7 @@ h1{font-size:54px;line-height:1.03;margin:0 0 12px;font-weight:800;letter-spacin
 h2{font-size:24px;line-height:1.22;margin:30px 0 10px;font-weight:600;letter-spacing:-.01em}
 p{font-size:18px;line-height:1.52;margin:0 0 16px;font-weight:400}
 img,video{display:block;width:100%;height:auto;margin:22px 0 30px;border-radius:0}.youtube-embed{position:relative;width:100%;aspect-ratio:16/9;margin:22px 0 30px}.youtube-embed iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
-p:not(.meta){text-align:left}
+p:not(.meta){text-align:left;word-break:normal;overflow-wrap:normal;-webkit-hyphens:none;hyphens:none}
 .lead{font-size:25px;line-height:1.23;font-weight:700;letter-spacing:-.02em;margin:0 0 28px}
 main a:not(.back){color:#0b57d0;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
 .back{display:inline-flex;align-items:center;justify-content:center;margin-top:26px;padding:9px 14px;border:1px solid #a7a7a7;border-radius:999px;color:#171717;text-decoration:none;font-size:14px;font-weight:600}
