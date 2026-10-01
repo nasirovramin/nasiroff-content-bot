@@ -2305,6 +2305,9 @@ html,body{margin:0;background:#f4f4f4;color:#171717;font-family:-apple-system,Bl
 
   <button type="button" onmousedown="remember();event.preventDefault()" onclick="fmt('formatBlock','h2')">H2</button>
   <button type="button" onmousedown="remember();event.preventDefault()" onclick="fmt('formatBlock','p')">Text</button>
+  <button type="button" title="Hər iki kənara düzləndir" onmousedown="remember();event.preventDefault()" onclick="setAlignment('justify')">Justify</button>
+  <button type="button" title="Sola düzləndir" onmousedown="remember();event.preventDefault()" onclick="setAlignment('left')">Left</button>
+  <button type="button" title="Sağa düzləndir" onmousedown="remember();event.preventDefault()" onclick="setAlignment('right')">Right</button>
 
   <button class="icon-btn has-tip" type="button" title="Şəkil əlavə et · avtomatik 1200 × 628 px" data-tip="Şəkil · avtomatik 1200 × 628 px" onclick="document.getElementById('imageInput').click()"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="16.5" cy="9" r="1.5"></circle><path d="M4 17l5-5 4 4 3-3 4 4"></path></svg></button>
   <button class="icon-btn has-tip" type="button" title="Video/GIF əlavə et" data-tip="Video/GIF əlavə et" onclick="document.getElementById('videoInput').click()"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="2"></rect><path d="M3 10h18"></path><path d="M7 6l3 4"></path><path d="M12 6l3 4"></path><path d="M10 13.2l5 3-5 3z" fill="currentColor" stroke="none"></path></svg></button>
@@ -2391,6 +2394,31 @@ function restoreSelection(){
   s.removeAllRanges();
   s.addRange(savedRange);
   return true;
+}
+
+function setAlignment(alignment){
+  if(!['justify','left','right'].includes(alignment)) return;
+  editor.focus();
+  restoreSelection();
+  const selection=window.getSelection();
+  if(!selection || !selection.rangeCount) return;
+  const range=selection.getRangeAt(0);
+  if(!editor.contains(range.commonAncestorContainer)) return;
+  let blocks=[];
+  if(range.collapsed){
+    const node=range.startContainer.nodeType===1?range.startContainer:range.startContainer.parentElement;
+    const block=node.closest('p,h1,h2,h3,h4,li,blockquote');
+    if(block && editor.contains(block)) blocks=[block];
+  }else{
+    blocks=Array.from(editor.querySelectorAll('p,h1,h2,h3,h4,li,blockquote')).filter(block=>range.intersectsNode(block));
+  }
+  if(blocks.length){
+    blocks.forEach(block=>block.style.textAlign=alignment);
+  }else{
+    document.execCommand({justify:'justifyFull',left:'justifyLeft',right:'justifyRight'}[alignment],false,null);
+  }
+  remember();
+  markDirty();
 }
 
 function getSelectedLink(){
