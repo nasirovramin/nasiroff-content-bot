@@ -2982,6 +2982,19 @@ ${bodyHtml}
     if (url.pathname === "/refresh-dord-baxis-link-5a91c2") {
       const articleId = url.searchParams.get("article") === "latest" ? await cmsGetLatestArticleId(env) : ARTICLE_ID;
       let article = await cmsGetArticle(env, articleId);
+      if (url.searchParams.get("target") === "align-left") {
+        if (!article?.html) return json({ ok: false, error: "article_missing" }, 404);
+        article.html = article.html.replace(/<(p|h[1-4]|li|blockquote)\b([^>]*)>/gi, (tag, name, attrs) => {
+          const style = attrs.match(/\bstyle=(["'])(.*?)\1/i);
+          if (style) {
+            const rules = style[2].replace(/text-align\s*:[^;]+;?/gi, "");
+            return `<${name}${attrs.replace(style[0], `style="${rules};text-align:left"`)}>`;
+          }
+          return `<${name}${attrs} style="text-align:left">`;
+        });
+        await cmsPutArticle(env, article, articleId);
+        return json({ ok: true, articleUrl: publicArticleUrl(article, articleId) });
+      }
       if (url.searchParams.get("target") === "kreadiv") {
         if (!article?.mainMessageId || !env.KREADIV_CHANNEL) return json({ ok: false, error: "published_message_or_channel_missing" }, 404);
         if (article.kreadivMessageId) return json({ ok: true, alreadyPublished: true, messageId: article.kreadivMessageId });
