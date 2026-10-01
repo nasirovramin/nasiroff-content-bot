@@ -2948,6 +2948,19 @@ ${bodyHtml}
     if (url.pathname === "/refresh-dord-baxis-link-5a91c2") {
       const articleId = ARTICLE_ID;
       let article = await cmsGetArticle(env, articleId);
+      if (url.searchParams.get("target") === "kreadiv") {
+        if (!article?.mainMessageId || !env.KREADIV_CHANNEL) return json({ ok: false, error: "published_message_or_channel_missing" }, 404);
+        if (article.kreadivMessageId) return json({ ok: true, alreadyPublished: true, messageId: article.kreadivMessageId });
+        const result = await (await tg(env.BOT_TOKEN, "copyMessage", {
+          chat_id: env.KREADIV_CHANNEL,
+          from_chat_id: env.MAIN_CHANNEL,
+          message_id: article.mainMessageId,
+          reply_markup: { inline_keyboard: [] }
+        })).json();
+        if (!result.ok) return json({ ok: false, error: result.description }, 502);
+        await cmsPutArticle(env, { ...article, kreadivMessageId: result.result.message_id, updatedAt: new Date().toISOString() }, articleId);
+        return json({ ok: true, messageId: result.result.message_id, channel: env.KREADIV_CHANNEL, articleUrl: publicArticleUrl(article, articleId) });
+      }
       if (url.searchParams.get("target") === "main") {
         if (!article?.html || !article.mainMessageId) return json({ ok: false, error: "published_message_missing" }, 404);
         const articleUrl = publicArticleUrl(article, articleId);
