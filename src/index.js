@@ -2989,7 +2989,7 @@ ${bodyHtml}
 
   
     if (url.pathname === "/refresh-dord-baxis-link-5a91c2") {
-      const articleId = url.searchParams.get("article") === "latest" ? await cmsGetLatestArticleId(env) : ARTICLE_ID;
+      const articleId = url.searchParams.get("article") === "portfolio" ? await cmsGetArticleIdBySlug(env, "ugurlu-portfolio") : url.searchParams.get("article") === "latest" ? await cmsGetLatestArticleId(env) : ARTICLE_ID;
       let article = await cmsGetArticle(env, articleId);
       if (url.searchParams.get("target") === "repair-portfolio-paragraphs") {
         const portfolioId = await cmsGetArticleIdBySlug(env, "ugurlu-portfolio");
