@@ -1328,11 +1328,11 @@ function cmsStub(env) {
   return env.CMS.get(id);
 }
 
-async function articleViews(env, articleId, ip = null) {
+async function articleViews(env, articleId, ip = null, exclude = false) {
   const response = await cmsStub(env).fetch("https://cms.internal/views", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ articleId, ip })
+    body: JSON.stringify({ articleId, ip, exclude })
   });
   if (!response.ok) throw new Error("View counter unavailable");
   return (await response.json()).count;
@@ -1568,7 +1568,7 @@ export class CmsStore {
     const url = new URL(request.url);
 
     if (url.pathname === "/views" && request.method === "POST") {
-      const { articleId, ip } = await request.json();
+      const { articleId, ip, exclude } = await request.json();
       const count = await this.ctx.storage.transaction(async storage => {
         const countKey = `views-count:${articleId}`;
         let count = await storage.get(countKey) || 0;
@@ -1578,10 +1578,20 @@ export class CmsStore {
             salt = crypto.randomUUID();
             await storage.put("views-salt", salt);
           }
+          const ownerDigest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${salt}:owner:${ip}`));
+          const ownerKey = "views-owner:" + Array.from(new Uint8Array(ownerDigest), b => b.toString(16).padStart(2, "0")).join("");
+          if (exclude) await storage.put(ownerKey, true);
+          const isOwner = await storage.get(ownerKey);
           const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${salt}:${articleId}:${ip}`));
           const hash = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, "0")).join("");
           const seenKey = `view-seen:${articleId}:${hash}`;
-          if (!await storage.get(seenKey)) {
+          if (isOwner) {
+            if (await storage.get(seenKey)) {
+              count = Math.max(0, count - 1);
+              await storage.delete(seenKey);
+              await storage.put(countKey, count);
+            }
+          } else if (!await storage.get(seenKey)) {
             count++;
             await storage.put(seenKey, true);
             await storage.put(countKey, count);
@@ -2265,7 +2275,7 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
           initialArticle?.createdAt || initialArticle?.updatedAt || new Date()
         );
 
-        initialEditorHtml = withArticleViews(initialEditorHtml, await articleViews(env, currentArticleId));
+        initialEditorHtml = withArticleViews(initialEditorHtml, await articleViews(env, currentArticleId, request.headers.get("CF-Connecting-IP"), true));
 
         const articleUrl = publicArticleUrl(initialArticle, currentArticleId);
         const previewUrl = `${articleUrl}?preview=1&u=${encodeURIComponent(userId)}&sig=${encodeURIComponent(sig)}`;
