@@ -1328,6 +1328,22 @@ function cmsStub(env) {
   return env.CMS.get(id);
 }
 
+async function articleViews(env, articleId, ip = null) {
+  const response = await cmsStub(env).fetch("https://cms.internal/views", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ articleId, ip })
+  });
+  if (!response.ok) throw new Error("View counter unavailable");
+  return (await response.json()).count;
+}
+
+function withArticleViews(html, count) {
+  const badge = `<span class="article-views" contenteditable="false" title="Unikal IP üzrə baxış sayı" aria-label="Baxış sayı"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg><span>${count}</span></span>`;
+  return html.replace(/(<p\b[^>]*class=["'][^"']*meta[^"']*["'][^>]*>)([\s\S]*?)(<\/p>)/i,
+    (_, open, text, close) => open + text + badge + close);
+}
+
 async function cmsGetArticle(env, articleId = ARTICLE_ID) {
   const path = articleId === ARTICLE_ID ? "/article" : `/article/${encodeURIComponent(articleId)}`;
   const r = await cmsStub(env).fetch(`https://cms.internal${path}`);
@@ -1550,6 +1566,31 @@ export class CmsStore {
 
   async fetch(request) {
     const url = new URL(request.url);
+
+    if (url.pathname === "/views" && request.method === "POST") {
+      const { articleId, ip } = await request.json();
+      const count = await this.ctx.storage.transaction(async storage => {
+        const countKey = `views-count:${articleId}`;
+        let count = await storage.get(countKey) || 0;
+        if (ip) {
+          let salt = await storage.get("views-salt");
+          if (!salt) {
+            salt = crypto.randomUUID();
+            await storage.put("views-salt", salt);
+          }
+          const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${salt}:${articleId}:${ip}`));
+          const hash = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, "0")).join("");
+          const seenKey = `view-seen:${articleId}:${hash}`;
+          if (!await storage.get(seenKey)) {
+            count++;
+            await storage.put(seenKey, true);
+            await storage.put(countKey, count);
+          }
+        }
+        return count;
+      });
+      return json({ count });
+    }
 
     if (url.pathname === "/publish-menu" && request.method === "POST") {
       const data = await request.json();
@@ -2219,10 +2260,12 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
         }
 
         const initialArticle = await cmsGetArticle(env, currentArticleId);
-        const initialEditorHtml = normalizeArticleMetaDate(
+        let initialEditorHtml = normalizeArticleMetaDate(
           removeSourceFooter(initialArticle?.html || defaultArticleHtml()),
           initialArticle?.createdAt || initialArticle?.updatedAt || new Date()
         );
+
+        initialEditorHtml = withArticleViews(initialEditorHtml, await articleViews(env, currentArticleId));
 
         const articleUrl = publicArticleUrl(initialArticle, currentArticleId);
         const previewUrl = `${articleUrl}?preview=1&u=${encodeURIComponent(userId)}&sig=${encodeURIComponent(sig)}`;
@@ -2257,6 +2300,7 @@ html,body{margin:0;background:#f4f4f4;color:#171717;font-family:-apple-system,Bl
 #editor{outline:none}
 #editor h1{font-size:54px;line-height:1.03;margin:0 0 12px;font-weight:800;letter-spacing:-.035em}
 #editor .meta{display:flex;align-items:center;gap:14px;font-size:16px;color:#747474;margin:0 0 34px}
+.article-views{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-size:13px;color:#999;order:2;user-select:none}.meta::after{order:1}
 #editor .meta:after{content:"";height:1px;background:#aaa;flex:1}
 #editor h2{font-size:24px;line-height:1.22;margin:30px 0 10px;font-weight:600}
 #editor p{font-size:18px;line-height:1.52;margin:0 0 16px}
@@ -2776,7 +2820,7 @@ editor.addEventListener('paste',e=>{
 
 function cleanEditorHtml(){
   const clone=editor.cloneNode(true);
-  clone.querySelectorAll('.media-actions').forEach(x=>x.remove());
+  clone.querySelectorAll('.media-actions,.article-views').forEach(x=>x.remove());
   clone.querySelectorAll('[contenteditable]').forEach(x=>x.removeAttribute('contenteditable'));
   return clone.innerHTML;
 }
@@ -2886,7 +2930,7 @@ markSaved();
         }
 
         const rawBodyHtml = savedArticle?.html || defaultArticleHtml();
-        const bodyHtml = normalizeArticleMetaDate(
+        let bodyHtml = normalizeArticleMetaDate(
           removeSourceFooter(rawBodyHtml),
           savedArticle?.createdAt || savedArticle?.updatedAt || new Date()
         );
@@ -2901,6 +2945,15 @@ markSaved();
             return Response.redirect(cleanUrl + url.search, 301);
           }
         }
+
+        const isPreview = url.searchParams.has("preview");
+        if (request.method === "POST" && url.searchParams.get("view") === "1") {
+          if (isPreview) return json({ count: await articleViews(env, currentArticleId) });
+          const ip = request.headers.get("CF-Connecting-IP");
+          return json({ count: await articleViews(env, currentArticleId, ip) });
+        }
+        if (request.method !== "GET" && request.method !== "HEAD") return new Response("Method not allowed", { status: 405 });
+        bodyHtml = withArticleViews(bodyHtml, await articleViews(env, currentArticleId));
 
         const pageTitle = articleTitleFromHtml(bodyHtml);
         const pageDescription = extractFirst(bodyHtml, "p", "lead") || pageTitle;
@@ -2921,6 +2974,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;fo
 main{max-width:900px;margin:0 auto;padding:34px 28px 76px}
 h1{font-size:54px;line-height:1.03;margin:0 0 12px;font-weight:800;letter-spacing:-.035em}
 .meta{display:flex;align-items:center;gap:14px;font-size:16px;line-height:1.2;color:#747474;margin:0 0 34px}
+.article-views{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-size:13px;color:#999;order:2;user-select:none}.meta::after{order:1}
 .meta::after{content:"";height:1px;background:#aaa;flex:1;min-width:60px}
 h2{font-size:24px;line-height:1.22;margin:30px 0 10px;font-weight:600;letter-spacing:-.01em}
 p{font-size:18px;line-height:1.52;margin:0 0 16px;font-weight:400}
@@ -2947,6 +3001,16 @@ main a:not(.back){color:#0b57d0;text-decoration:underline;text-underline-offset:
 ${bodyHtml}
 <a class="back" href="${backHref}" target="_blank" rel="noopener noreferrer">${backLabel}</a>
 </main>
+<script>
+if (!new URL(location.href).searchParams.has('preview')) {
+  const viewUrl = new URL(location.href);
+  viewUrl.searchParams.set('view', '1');
+  fetch(viewUrl, {method:'POST', cache:'no-store'}).then(r=>r.ok?r.json():null).then(data=>{
+    const label=document.querySelector('.article-views span');
+    if(data && label) label.textContent=data.count;
+  }).catch(()=>{});
+}
+</script>
 </body>
 </html>`;
         return new Response(html, {
