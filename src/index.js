@@ -2077,7 +2077,7 @@ h1{font-size:36px;line-height:1.1;margin:0 0 12px}h2{margin-top:28px;font-size:2
         return json({ ok: false, error: "unauthorized" }, 401);
       }
 
-      if (request.method === "GET") {
+      if (request.method === "GET" || request.method === "HEAD" || (request.method === "POST" && url.searchParams.get("view") === "1")) {
         const saved = await cmsGetArticle(env, currentArticleId);
         return json({ ok: true, article: saved });
       }
