@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#ffffff">
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src https://jpspagptdbytagimmesp.supabase.co; img-src https: data:; frame-src https://www.youtube-nocookie.com; base-uri 'none'; form-action 'none'">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://telegram.org; style-src 'unsafe-inline'; connect-src https://jpspagptdbytagimmesp.supabase.co; img-src https: data:; frame-src https://www.youtube-nocookie.com; base-uri 'none'; form-action 'none'">
 <title>KREADIV — Məqalə</title>
 <style>
 :root {color-scheme:light;font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:#fff;color:#161616}
@@ -36,6 +37,17 @@ button,.action {appearance:none;border:1px solid #dedede;border-radius:5px;paddi
 button:hover,.action:hover{background:#f4f4f4}
 footer {border-top:1px solid #ececec;padding-top:24px;margin-top:60px;font-size:14px;color:#808080}
 footer a{color:inherit;text-decoration:none}
+/* Match native Telegram theme while retaining KREADIV's brand accent. */
+:root{--k-bg:var(--tg-theme-bg-color,#fff);--k-text:var(--tg-theme-text-color,#161616);--k-hint:var(--tg-theme-hint-color,#777);--k-link:var(--tg-theme-link-color,#d75434);--k-border:var(--tg-theme-section-separator-color,#eaeaea)}
+:root,body{background:var(--k-bg);color:var(--k-text)}
+header,footer{border-color:var(--k-border)}
+.logo{color:var(--k-text)}
+.tag,.state,footer{color:var(--k-hint)}
+.article a{color:var(--k-link)}
+.article blockquote{color:var(--k-hint)}
+button,.action{background:var(--k-bg);color:var(--k-text);border-color:var(--k-border)}
+button:hover,.action:hover{background:var(--tg-theme-secondary-bg-color,#f4f4f4)}
+.article .video{background:var(--tg-theme-secondary-bg-color,#eee)}
 @media(max-width:550px){main{padding:24px 18px 48px}.article{font-size:17px;line-height:1.6}.tag{display:none}}
 </style>
 </head>
@@ -44,7 +56,7 @@ footer a{color:inherit;text-decoration:none}
 <header><a class="logo" href="https://t.me/Kreadiv"><span class="dot"></span>KREADIV</a><span class="tag">DESIGN &amp; IDEAS</span></header>
 <div id="status" class="state" role="status"><span class="spinner" aria-hidden="true"></span><div>Məqalə yüklənir...</div></div>
 <section id="content" hidden><h1 id="title"></h1><article id="article" class="article"></article></section>
-<footer><a href="https://t.me/Kreadiv">← KREADIV kanalına geri qayıt</a></footer>
+<footer><a id="back-to-channel" href="https://t.me/Kreadiv">← KREADIV kanalına geri qayıt</a></footer>
 </main>
 <script>
 (()=>{
@@ -54,7 +66,45 @@ const status=document.getElementById("status");
 const content=document.getElementById("content");
 const title=document.getElementById("title");
 const article=document.getElementById("article");
-const source=new URLSearchParams(location.search).get("article");
+const params=new URLSearchParams(location.search);
+const tg=window.Telegram?.WebApp;
+const inTelegram=Boolean(tg&&tg.platform&&tg.platform!=="unknown");
+function miniAppArticle(){
+  // The bot encodes the canonical Telegraph URL in startapp=a_<base64url>.
+  // Telegram exposes it in initDataUnsafe and in tgWebAppStartParam.
+  const hashParams=new URLSearchParams(location.hash.replace(/^#/,""));
+  const start=(tg?.initDataUnsafe?.start_param||params.get("tgWebAppStartParam")||
+    hashParams.get("tgWebAppStartParam")||params.get("startapp")||"");
+  if(!/^a_[A-Za-z0-9_-]{1,510}$/.test(start)||start.length>512)return "";
+  try {
+    const encoded=start.slice(2).replace(/-/g,"+").replace(/_/g,"/");
+    const padded=encoded+"=".repeat((4-encoded.length%4)%4);
+    const bytes=Uint8Array.from(atob(padded),c=>c.charCodeAt(0));
+    return new TextDecoder("utf-8",{fatal:true}).decode(bytes);
+  }catch{return "";}
+}
+const source=miniAppArticle()||params.get("article");
+function applyTelegramAppearance(){
+  if(!inTelegram)return;
+  document.documentElement.style.colorScheme=tg.colorScheme==="dark"?"dark":"light";
+}
+function returnToChannel(event){
+  if(!inTelegram)return;
+  event.preventDefault();
+  // A startapp link opened from the KREADIV channel closes back to that chat.
+  if(tg.initDataUnsafe?.start_param||params.get("tgWebAppStartParam"))tg.close();
+  else tg.openTelegramLink?.("https://t.me/Kreadiv");
+}
+if(inTelegram){
+  tg.ready();
+  tg.expand();
+  applyTelegramAppearance();
+  tg.onEvent?.("themeChanged",applyTelegramAppearance);
+  tg.BackButton?.show();
+  tg.BackButton?.onClick(()=>tg.close());
+  document.getElementById("back-to-channel")?.addEventListener("click",returnToChannel);
+}
+
 function valid(raw){
  try{
   if(!raw||raw.length>1800)return false;
