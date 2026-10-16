@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="az">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#ffffff">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src https://jpspagptdbytagimmesp.supabase.co; img-src https: data:; frame-src https://www.youtube-nocookie.com; base-uri 'none'; form-action 'none'">
+<title>KREADIV — Məqalə</title>
+<style>
+:root {color-scheme:light;font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:#fff;color:#161616}
+* {box-sizing:border-box}
+body {margin:0}
+main {max-width:748px;margin:0 auto;padding:29px 22px 64px;min-height:100vh}
+header {display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e9e9e9;padding-bottom:20px}
+.logo {display:inline-flex;align-items:center;gap:12px;color:#171717;text-decoration:none;font-weight:800;letter-spacing:.22em;font-size:16px}
+.dot {width:12px;height:12px;background:#ff5e38;border-radius:50%}
+.tag {color:#999;font-size:11px;letter-spacing:.1em;text-transform:uppercase}
+h1 {font-size:clamp(29px,6.5vw,46px);line-height:1.13;letter-spacing:-.04em;margin:44px 0 32px}
+.article {font-size:18px;line-height:1.83;overflow-wrap:anywhere}
+.article p {margin:0 0 1.3em}
+.article h2,.article h3,.article h4 {font-size:1.35em;line-height:1.36;margin:1.7em 0 .65em;letter-spacing:-.02em}
+.article figure {margin:30px 0}
+.article img {display:block;max-width:100%;height:auto;margin:0 auto;border-radius:3px}
+.article figcaption {font-size:13px;text-align:center;color:#888;padding-top:8px}
+.article blockquote {border-left:3px solid #ff5e38;color:#555;padding:2px 0 2px 18px;margin:28px 0}
+.article a {color:#d75434;text-decoration-thickness:1px;text-underline-offset:3px}
+.article ul,.article ol {padding-left:25px}
+.article .video {width:100%;aspect-ratio:16/9;background:#eee;margin:20px 0}
+.article iframe {width:100%;height:100%;border:0}
+.state {padding:72px 0;color:#777;line-height:1.6}
+.spinner {display:inline-block;width:21px;height:21px;border:2px solid #ddd;border-top-color:#ff5e38;border-radius:50%;animation:spin .7s linear infinite;margin-bottom:16px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.error {color:#444;font-size:17px;line-height:1.7}
+button,.action {appearance:none;border:1px solid #dedede;border-radius:5px;padding:12px 17px;color:#171717;background:#fff;font:inherit;cursor:pointer;text-decoration:none;display:inline-block;margin:10px 10px 10px 0}
+button:hover,.action:hover{background:#f4f4f4}
+footer {border-top:1px solid #ececec;padding-top:24px;margin-top:60px;font-size:14px;color:#808080}
+footer a{color:inherit;text-decoration:none}
+@media(max-width:550px){main{padding:24px 18px 48px}.article{font-size:17px}.tag{display:none}}
+</style>
+</head>
+<body>
+<main>
+<header><a class="logo" href="https://t.me/Kreadiv"><span class="dot"></span>KREADIV</a><span class="tag">DESIGN &amp; IDEAS</span></header>
+<div id="status" class="state" role="status"><span class="spinner" aria-hidden="true"></span><div>Məqalə yüklənir...</div></div>
+<section id="content" hidden><h1 id="title"></h1><article id="article" class="article"></article></section>
+<footer><a href="https://t.me/Kreadiv">← KREADIV kanalına qayıt</a></footer>
+</main>
+<script>
+(()=>{
+"use strict";
+const API="https://jpspagptdbytagimmesp.supabase.co/functions/v1/kreadiv-reader";
+const status=document.getElementById("status");
+const content=document.getElementById("content");
+const title=document.getElementById("title");
+const article=document.getElementById("article");
+const source=new URLSearchParams(location.search).get("article");
+function valid(raw){
+ try{
+  if(!raw||raw.length>1800)return false;
+  const u=new URL(raw);
+  return u.protocol==="https:"&&u.hostname==="telegra.ph"&&!u.port&&!u.username&&!u.password&&u.pathname.length>1;
+ }catch{return false;}
+}
+function fail(msg){
+ content.hidden=true;
+ status.hidden=false;
+ status.className="state";
+ status.replaceChildren();
+ const p=document.createElement("p");p.className="error";p.textContent=msg;status.append(p);
+ const btn=document.createElement("button");btn.textContent="Yenidən yoxla";btn.onclick=load;status.append(btn);
+ const back=document.createElement("a");back.href="https://t.me/Kreadiv";back.className="action";back.textContent="KREADIV kanalına qayıt";status.append(back);
+}
+async function load(){
+ if(!valid(source)){fail("Məqalə linki düzgün deyil. KREADIV kanalındakı “Ətraflı” düyməsindən istifadə edin.");return;}
+ status.hidden=false;content.hidden=true;
+ status.className="state";
+ status.replaceChildren();
+ const spinner=document.createElement("span");spinner.className="spinner";spinner.setAttribute("aria-hidden","true");
+ const txt=document.createElement("div");txt.textContent="Məqalə yüklənir...";
+ status.append(spinner,txt);
+ const controller=new AbortController();
+ const timer=setTimeout(()=>controller.abort(),14000);
+ try {
+  const r=await fetch(API+"?format=json&article="+encodeURIComponent(source),{signal:controller.signal,mode:"cors",cache:"default"});
+  if(!r.ok)throw new Error("HTTP "+r.status);
+  const data=await r.json();
+  if(data.ok!==true||typeof data.html!=="string"||typeof data.title!=="string")throw new Error("Incomplete");
+  title.textContent=data.title;
+  document.title=data.title+" — KREADIV";
+  // API builds html strictly from a safe allowlist of Telegraph nodes and URLs.
+  article.innerHTML=data.html;
+  status.hidden=true;content.hidden=false;
+ }catch(e){
+  fail("Məqaləni serverdən götürmək mümkün olmadı. Zəhmət olmasa bir qədər sonra yenidən yoxlayın.");
+ }finally{clearTimeout(timer);}
+}
+load();
+})();
+</script>
+</body>
+</html>
