@@ -28,7 +28,6 @@ h1 {font-size:clamp(29px,6.5vw,46px);line-height:1.13;letter-spacing:-.04em;marg
 .article ul,.article ol {padding-left:25px}
 .article .video {width:100%;aspect-ratio:16/9;background:#eee;margin:20px 0}
 .article iframe {width:100%;height:100%;border:0}
-.video-fallback {display:inline-block;margin:0 0 22px;color:#d75434;font-size:14px;text-decoration:underline;text-underline-offset:3px}
 .state {padding:72px 0;color:#777;line-height:1.6}
 .spinner {display:inline-block;width:21px;height:21px;border:2px solid #ddd;border-top-color:#ff5e38;border-radius:50%;animation:spin .7s linear infinite;margin-bottom:16px}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -45,7 +44,7 @@ footer a{color:inherit;text-decoration:none}
 <header><a class="logo" href="https://t.me/Kreadiv"><span class="dot"></span>KREADIV</a><span class="tag">DESIGN &amp; IDEAS</span></header>
 <div id="status" class="state" role="status"><span class="spinner" aria-hidden="true"></span><div>Məqalə yüklənir...</div></div>
 <section id="content" hidden><h1 id="title"></h1><article id="article" class="article"></article></section>
-<footer><a href="https://t.me/Kreadiv">← KREADIV kanalına qayıt</a></footer>
+<footer><a href="https://t.me/Kreadiv">← KREADIV kanalına geri qayıt</a></footer>
 </main>
 <script>
 (()=>{
@@ -91,26 +90,9 @@ async function load(){
   document.title=data.title+" — KREADIV";
   // API builds html strictly from a safe allowlist of Telegraph nodes and URLs.
   article.innerHTML=data.html;
-  // YouTube needs the embedding site's origin to avoid player error 153.
+  // Preserve origin referrer for the embedded YouTube player; add no extra links.
   for(const frame of article.querySelectorAll(".video iframe")){
     frame.referrerPolicy="strict-origin-when-cross-origin";
-    let id="";
-    try {
-      const video=new URL(frame.src);
-      if(["www.youtube-nocookie.com","www.youtube.com"].includes(video.hostname)){
-        const match=video.pathname.match(/^\/embed\/([a-zA-Z0-9_-]{11})$/);
-        if(match)id=match[1];
-      }
-    }catch{}
-    if(id){
-      const link=document.createElement("a");
-      link.className="video-fallback";
-      link.href="https://www.youtube.com/watch?v="+id;
-      link.target="_blank";
-      link.rel="noopener noreferrer";
-      link.textContent="Video açılmırsa, YouTube-da izlə ↗";
-      frame.closest(".video")?.after(link);
-    }
   }
   status.hidden=true;content.hidden=false;
  }catch(e){
