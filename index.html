@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#ffffff">
-<meta name="referrer" content="no-referrer">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src https://jpspagptdbytagimmesp.supabase.co; img-src https: data:; frame-src https://www.youtube-nocookie.com; base-uri 'none'; form-action 'none'">
 <title>KREADIV — Məqalə</title>
 <style>
@@ -28,6 +28,7 @@ h1 {font-size:clamp(29px,6.5vw,46px);line-height:1.13;letter-spacing:-.04em;marg
 .article ul,.article ol {padding-left:25px}
 .article .video {width:100%;aspect-ratio:16/9;background:#eee;margin:20px 0}
 .article iframe {width:100%;height:100%;border:0}
+.video-fallback {display:inline-block;margin:0 0 22px;color:#d75434;font-size:14px;text-decoration:underline;text-underline-offset:3px}
 .state {padding:72px 0;color:#777;line-height:1.6}
 .spinner {display:inline-block;width:21px;height:21px;border:2px solid #ddd;border-top-color:#ff5e38;border-radius:50%;animation:spin .7s linear infinite;margin-bottom:16px}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -90,6 +91,27 @@ async function load(){
   document.title=data.title+" — KREADIV";
   // API builds html strictly from a safe allowlist of Telegraph nodes and URLs.
   article.innerHTML=data.html;
+  // YouTube needs the embedding site's origin to avoid player error 153.
+  for(const frame of article.querySelectorAll(".video iframe")){
+    frame.referrerPolicy="strict-origin-when-cross-origin";
+    let id="";
+    try {
+      const video=new URL(frame.src);
+      if(["www.youtube-nocookie.com","www.youtube.com"].includes(video.hostname)){
+        const match=video.pathname.match(/^\/embed\/([a-zA-Z0-9_-]{11})$/);
+        if(match)id=match[1];
+      }
+    }catch{}
+    if(id){
+      const link=document.createElement("a");
+      link.className="video-fallback";
+      link.href="https://www.youtube.com/watch?v="+id;
+      link.target="_blank";
+      link.rel="noopener noreferrer";
+      link.textContent="Video açılmırsa, YouTube-da izlə ↗";
+      frame.closest(".video")?.after(link);
+    }
+  }
   status.hidden=true;content.hidden=false;
  }catch(e){
   fail("Məqaləni serverdən götürmək mümkün olmadı. Zəhmət olmasa bir qədər sonra yenidən yoxlayın.");
