@@ -50,11 +50,14 @@ footer a{color:inherit;text-decoration:none}
 (()=>{
 "use strict";
 const API="https://jpspagptdbytagimmesp.supabase.co/functions/v1/kreadiv-reader";
+const SHORT_API="https://jpspagptdbytagimmesp.supabase.co/functions/v1/kreadiv-shortlinks";
 const status=document.getElementById("status");
 const content=document.getElementById("content");
 const title=document.getElementById("title");
 const article=document.getElementById("article");
-const source=new URLSearchParams(location.search).get("article");
+const search=new URLSearchParams(location.search);
+const original=search.get("article");
+const shortCode=search.get("s");
 function valid(raw){
  try{
   if(!raw||raw.length>1800)return false;
@@ -72,7 +75,9 @@ function fail(msg){
  const back=document.createElement("a");back.href="https://t.me/Kreadiv";back.className="action";back.textContent="KREADIV kanalına qayıt";status.append(back);
 }
 async function load(){
- if(!valid(source)){fail("Məqalə linki düzgün deyil. KREADIV kanalındakı “Ətraflı” düyməsindən istifadə edin.");return;}
+ if(!valid(original) && !(shortCode && /^[A-Za-z0-9_-]{10}$/.test(shortCode))){
+  fail("Məqalə linki düzgün deyil. KREADIV kanalındakı “Ətraflı” düyməsindən istifadə edin.");return;
+ }
  status.hidden=false;content.hidden=true;
  status.className="state";
  status.replaceChildren();
@@ -82,7 +87,17 @@ async function load(){
  const controller=new AbortController();
  const timer=setTimeout(()=>controller.abort(),14000);
  try {
-  const r=await fetch(API+"?format=json&article="+encodeURIComponent(source),{signal:controller.signal,mode:"cors",cache:"default"});
+  let articleUrl=valid(original)?original:"";
+  if(!articleUrl){
+    const lookup=await fetch(SHORT_API+"?s="+encodeURIComponent(shortCode),{
+      signal:controller.signal,mode:"cors",cache:"default"
+    });
+    if(!lookup.ok)throw new Error("Short link not found");
+    const resolved=await lookup.json();
+    if(resolved.ok!==true||!valid(resolved.article))throw new Error("Invalid short link");
+    articleUrl=resolved.article;
+  }
+  const r=await fetch(API+"?format=json&article="+encodeURIComponent(articleUrl),{signal:controller.signal,mode:"cors",cache:"default"});
   if(!r.ok)throw new Error("HTTP "+r.status);
   const data=await r.json();
   if(data.ok!==true||typeof data.html!=="string"||typeof data.title!=="string")throw new Error("Incomplete");
