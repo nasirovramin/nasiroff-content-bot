@@ -57,7 +57,9 @@ const title=document.getElementById("title");
 const article=document.getElementById("article");
 const search=new URLSearchParams(location.search);
 const original=search.get("article");
-const shortCode=search.get("s");
+// Supports both the existing ?s=code and the branded kreadiv.az/r/code path.
+const route=location.pathname.match(/^\/r\/([A-Za-z0-9_-]{10})\/?$/);
+const shortCode=search.get("s") || (route ? route[1] : "");
 function valid(raw){
  try{
   if(!raw||raw.length>1800)return false;
