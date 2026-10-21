@@ -8,6 +8,7 @@ on:
 jobs:
   health:
     runs-on: ubuntu-latest
+    timeout-minutes: 2
     steps:
       - name: Check Gemini health
         run: |
